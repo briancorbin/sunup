@@ -16,6 +16,7 @@ export const HELP_TEXT = [
   "`/sunup join` / `/sunup leave` — manage your participation",
   "`/sunup status` — show this channel's check-in config",
   "`/sunup config <field> <value>` — fields: `prompt HH:MM`, `digest HH:MM`, `days mon,tue,...`, `tz <IANA>`, `reminder <minutes>`, `mood on|off`, `name <text>`",
+  "`/sunup remove` — delete this channel's check-in (asks for confirmation)",
   "`/sunup questions Q1 | Q2 | Q3` — set questions (last one is the blockers question)",
   "`/kudos @user <message>` — celebrate a teammate",
 ].join("\n");
@@ -79,6 +80,22 @@ export async function handleStatus(deps: Deps, channelId: string): Promise<strin
     `• Questions:\n${standup.questions.map((q) => `    ${q}`).join("\n")}`,
     `• Participants (${participants.length}): ${participants.map((p) => `<@${p.userId}>`).join(", ") || "none"}`,
   ].join("\n");
+}
+
+/** `/sunup remove [confirm]` — deleting cascades all runs, responses, and participants. */
+export async function handleRemove(deps: Deps, channelId: string, confirmed: boolean): Promise<string> {
+  const standup = await deps.storage.getStandupByChannel(channelId);
+  if (!standup) return "No check-in in this channel — nothing to remove.";
+  if (!confirmed) {
+    const participants = await deps.storage.listParticipants(standup.id);
+    return [
+      `⚠️ This will permanently delete *${standup.name}* — its ${participants.length} participant${participants.length === 1 ? "" : "s"} and all check-in history for this channel.`,
+      "If you're sure, run `/sunup remove confirm`.",
+      "(Just want out yourself? That's `/sunup leave`. Want to pause it? `/sunup config days` with fewer days.)",
+    ].join("\n");
+  }
+  await deps.storage.deleteStandup(standup.id);
+  return `🗑️ *${standup.name}* removed. Prompts and digests for this channel stop immediately. \`/sunup setup\` any time to start fresh.`;
 }
 
 /** `/sunup config <field> <value>` */

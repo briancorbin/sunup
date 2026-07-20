@@ -89,6 +89,7 @@ Teammates run `/sunup join`. That's it. `/sunup help` shows everything else:
 | `/sunup status` | Show the channel's check-in config |
 | `/sunup config <field> <value>` | `prompt 08:30`, `digest 12:00`, `days mon,wed,fri`, `tz Europe/London`, `reminder 30`, `mood off`, `name Standup` |
 | `/sunup questions Q1 \| Q2 \| Q3` | Set custom questions (the last is the blockers question) |
+| `/sunup remove` | Delete the channel's check-in and its history (asks to confirm) |
 | `/kudos @user <message>` | Celebrate a teammate |
 
 ### Optional: data retention

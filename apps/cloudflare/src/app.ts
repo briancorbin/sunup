@@ -12,6 +12,7 @@ import {
   handleKudos,
   handleLeave,
   handleQuestions,
+  handleRemove,
   handleSetup,
   handleStatus,
   openCheckinModal,
@@ -82,6 +83,9 @@ export function buildApp(env: Env): SlackApp<Env> {
         }
         case "questions":
           return respond(await handleQuestions(deps, channelId, argText));
+        case "remove":
+        case "delete":
+          return respond(await handleRemove(deps, channelId, argText.toLowerCase() === "confirm"));
         case "help":
         default:
           return respond(HELP_TEXT);
