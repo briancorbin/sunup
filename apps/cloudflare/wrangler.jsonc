@@ -13,7 +13,7 @@
       "binding": "DB",
       "database_name": "sunup",
       // Replace after `wrangler d1 create sunup` (see README).
-      "database_id": "REPLACE_WITH_YOUR_D1_DATABASE_ID"
+      "database_id": "1aa32b3e-581f-49c6-aed5-3e6b6054f786"
     }
   ],
   "vars": {
