@@ -1,15 +1,50 @@
 import type { Storage } from "./ports";
 import { SlackClient } from "./slack";
-import { isSnoozed, type Participant, type Standup } from "./types";
-import { localParts, parseHM } from "./time";
+import { isSnoozed, type CheckinResponse, type Participant, type Standup } from "./types";
+import { addDays, localParts, parseHM } from "./time";
 import { buildDigest } from "./blocks/digest";
 import { buildPromptMessage } from "./blocks/checkin-modal";
+import { buildWeeklyRetro } from "./blocks/retro";
 
 export interface Deps {
   storage: Storage;
   slack: SlackClient;
   /** Delete check-in/kudos data older than this many days. Unset = keep forever. */
   retentionDays?: number;
+}
+
+/**
+ * Consecutive most-recent runs with a response, given most-recent-first
+ * history. Today's still-open run doesn't break the streak before the digest.
+ */
+export function computeStreak(history: Array<{ runDate: string; responded: boolean }>, todayDate: string): number {
+  let streak = 0;
+  for (const h of history) {
+    if (h.runDate === todayDate && !h.responded) continue;
+    if (!h.responded) break;
+    streak++;
+  }
+  return streak;
+}
+
+/** Current streak per responder — used to decorate digests with milestones. */
+export async function streaksForResponders(
+  deps: Deps,
+  standup: Standup,
+  responses: CheckinResponse[],
+  todayDate: string,
+): Promise<Record<string, number>> {
+  const streaks: Record<string, number> = {};
+  for (const r of responses) {
+    const history = await deps.storage.listUserRunHistory(standup.id, r.userId, 60);
+    streaks[r.userId] = computeStreak(history, todayDate);
+  }
+  return streaks;
+}
+
+/** The standup's last scheduled day of the week (Monday-start week, so Sunday is last). */
+export function lastScheduledDay(scheduleDays: number[]): number {
+  return [...scheduleDays].sort((a, b) => ((a + 6) % 7) - ((b + 6) % 7)).at(-1) ?? 5;
 }
 
 /** The timezone a participant is prompted in. */
@@ -103,10 +138,59 @@ async function tickStandup(deps: Deps, standup: Standup, now: Date): Promise<voi
   }
 
   // Digest — snoozed participants don't count as "waiting on"
-  if (digestDue && !run.digestPostedAt) {
-    const active = participants.filter((p) => !isSnoozed(p, anchor.date));
-    const digest = buildDigest(standup, run, responses, active);
-    const posted = await deps.slack.postMessage(standup.channelId, digest.text, digest.blocks);
-    await deps.storage.markDigestPosted(run.id, nowIso, posted.ts ?? null);
+  if (digestDue) {
+    let digestJustPosted = false;
+    if (!run.digestPostedAt) {
+      const active = participants.filter((p) => !isSnoozed(p, anchor.date));
+      const streaks = await streaksForResponders(deps, standup, responses, anchor.date);
+      const digest = buildDigest(standup, run, responses, active, streaks);
+      const posted = await deps.slack.postMessage(standup.channelId, digest.text, digest.blocks);
+      await deps.storage.markDigestPosted(run.id, nowIso, posted.ts ?? null);
+      digestJustPosted = true;
+    }
+
+    // Weekly retro: after the daily digest on the week's last scheduled day.
+    if (
+      (digestJustPosted || run.digestPostedAt) &&
+      anchor.weekday === lastScheduledDay(standup.scheduleDays) &&
+      standup.lastRetroDate !== anchor.date
+    ) {
+      try {
+        await postWeeklyRetro(deps, standup, participants, anchor.date);
+        await deps.storage.setLastRetroDate(standup.id, anchor.date);
+      } catch (err) {
+        console.error(`sunup cron: weekly retro for standup ${standup.id} failed`, err);
+      }
+    }
   }
+}
+
+async function postWeeklyRetro(deps: Deps, standup: Standup, participants: Participant[], weekEnd: string): Promise<void> {
+  const weekStart = addDays(weekEnd, -6);
+  const inWindow = (d: string) => d >= weekStart && d <= weekEnd;
+
+  const runs = (await deps.storage.listRecentRuns(standup.id, 10)).filter((r) => inWindow(r.runDate)).reverse();
+  const responses = (await deps.storage.listRecentResponses(standup.id, 200)).filter((r) => inWindow(r.runDate));
+  const active = participants.filter((p) => !isSnoozed(p, weekEnd));
+  const streaks = await streaksForResponders(
+    deps,
+    standup,
+    // Unique users who responded this week.
+    [...new Map(responses.map((r) => [r.response.userId, r.response])).values()],
+    weekEnd,
+  );
+  const weekKudos = await deps.storage.kudosLeaderboard(`${weekStart}T00:00:00.000Z`, 50);
+  const kudosGiven = weekKudos.reduce((a, e) => a + e.count, 0);
+
+  const retro = buildWeeklyRetro(standup, {
+    weekStart,
+    weekEnd,
+    runs,
+    responses,
+    participants: active,
+    streaks,
+    kudosGiven,
+    topKudos: weekKudos[0] ?? null,
+  });
+  await deps.slack.postMessage(standup.channelId, retro.text, retro.blocks);
 }

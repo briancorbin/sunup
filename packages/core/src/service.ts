@@ -1,4 +1,4 @@
-import type { Deps } from "./cron";
+import { computeStreak, streaksForResponders, type Deps } from "./cron";
 import type { CheckinResponse, Standup } from "./types";
 import { DEFAULT_QUESTIONS, DEFAULT_STANDUP, isBlocker, isSnoozed } from "./types";
 import { buildDigest } from "./blocks/digest";
@@ -18,6 +18,7 @@ export const HELP_TEXT = [
   "`/sunup status` — show this channel's check-in config",
   "`/sunup config <field> <value>` — fields: `prompt HH:MM`, `digest HH:MM`, `days mon,tue,...`, `tz <IANA>`, `reminder <minutes>`, `mood on|off`, `name <text>`",
   "`/sunup snooze <days>` / `/sunup snooze off` — pause your prompts (vacation mode)",
+  "`/sunup export` — CSV of this channel's full check-in history (15-min link)",
   "`/sunup remove` — delete this channel's check-in (asks for confirmation)",
   "`/sunup questions Q1 | Q2 | Q3` — set questions (last one is the blockers question)",
   "`/kudos @user <message>` — celebrate a teammate",
@@ -214,20 +215,6 @@ export function parseCheckinSubmission(
   };
 }
 
-/**
- * Consecutive most-recent runs with a response, given most-recent-first
- * history. Today's still-open run doesn't break the streak before the digest.
- */
-export function computeStreak(history: Array<{ runDate: string; responded: boolean }>, todayDate: string): number {
-  let streak = 0;
-  for (const h of history) {
-    if (h.runDate === todayDate && !h.responded) continue;
-    if (!h.responded) break;
-    streak++;
-  }
-  return streak;
-}
-
 export async function handleCheckinSubmission(deps: Deps, standup: Standup, response: CheckinResponse): Promise<void> {
   await deps.storage.upsertResponse(response);
 
@@ -238,7 +225,8 @@ export async function handleCheckinSubmission(deps: Deps, standup: Standup, resp
     try {
       const responses = await deps.storage.listResponses(run.id);
       const participants = (await deps.storage.listParticipants(standup.id)).filter((p) => !isSnoozed(p, run.runDate));
-      const digest = buildDigest(standup, run, responses, participants);
+      const streaks = await streaksForResponders(deps, standup, responses, run.runDate);
+      const digest = buildDigest(standup, run, responses, participants, streaks);
       await deps.slack.updateMessage(standup.channelId, run.digestTs, digest.text, digest.blocks);
       lateNote = " Today's digest already went out — I've updated it to include you.";
     } catch (err) {

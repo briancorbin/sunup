@@ -15,6 +15,9 @@ import {
   handleRemove,
   handleSetup,
   handleSnooze,
+  makeExportToken,
+  toCsv,
+  verifyExportToken,
   handleStatus,
   openCheckinModal,
   openCheckinModalForRun,
@@ -40,7 +43,26 @@ export function buildDeps(env: Env): Deps {
   };
 }
 
-export function buildApp(env: Env): SlackApp<Env> {
+/** GET /export?token=… — CSV download behind a short-lived HMAC-signed link. */
+export async function handleExportRequest(env: Env, url: URL): Promise<Response> {
+  const token = url.searchParams.get("token") ?? "";
+  const standupId = await verifyExportToken(env.SLACK_SIGNING_SECRET, token, Math.floor(Date.now() / 1000));
+  if (!standupId) return new Response("This export link is invalid or expired — run /sunup export again.", { status: 403 });
+  const storage = new D1Storage(env.DB);
+  const standup = await storage.getStandup(standupId);
+  if (!standup) return new Response("Check-in not found.", { status: 404 });
+  const rows = await storage.listRecentResponses(standupId, 10000);
+  const filename = `sunup-${standup.name.replace(/[^a-z0-9]+/gi, "-").toLowerCase()}.csv`;
+  return new Response(toCsv(standup, rows), {
+    headers: {
+      "Content-Type": "text/csv; charset=utf-8",
+      "Content-Disposition": `attachment; filename="${filename}"`,
+      "Cache-Control": "no-store",
+    },
+  });
+}
+
+export function buildApp(env: Env, origin: string): SlackApp<Env> {
   const app = new SlackApp({ env });
   const deps = buildDeps(env);
 
@@ -84,6 +106,15 @@ export function buildApp(env: Env): SlackApp<Env> {
         }
         case "questions":
           return respond(await handleQuestions(deps, channelId, argText));
+        case "export": {
+          const standup = await deps.storage.getStandupByChannel(channelId);
+          if (!standup) return respond("No check-in in this channel yet — create one with `/sunup setup`.");
+          const expires = Math.floor(Date.now() / 1000) + 15 * 60;
+          const token = await makeExportToken(env.SLACK_SIGNING_SECRET, standup.id, expires);
+          return respond(
+            `📄 CSV export of *${standup.name}* — link valid for 15 minutes:\n${origin}/export?token=${token}`,
+          );
+        }
         case "snooze":
           return respond(await handleSnooze(deps, channelId, userId, argText.toLowerCase(), new Date()));
         case "remove":

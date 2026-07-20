@@ -22,6 +22,7 @@ interface StandupRow {
   user_tz_prompts: number;
   reminder_minutes: number;
   include_mood: number;
+  last_retro_date: string | null;
 }
 
 function rowToStandup(row: StandupRow): Standup {
@@ -37,6 +38,7 @@ function rowToStandup(row: StandupRow): Standup {
     userTzPrompts: row.user_tz_prompts === 1,
     reminderMinutes: row.reminder_minutes,
     includeMood: row.include_mood === 1,
+    lastRetroDate: row.last_retro_date,
   };
 }
 
@@ -94,7 +96,7 @@ export class D1Storage implements Storage {
     return row ? rowToStandup(row) : null;
   }
 
-  async createStandup(input: Omit<Standup, "id">): Promise<Standup> {
+  async createStandup(input: Omit<Standup, "id" | "lastRetroDate">): Promise<Standup> {
     const row = await this.db
       .prepare(
         `INSERT INTO standups (name, channel_id, questions, schedule_days, prompt_time, digest_time, timezone, user_tz_prompts, reminder_minutes, include_mood)
@@ -139,6 +141,10 @@ export class D1Storage implements Storage {
 
   async deleteStandup(id: number): Promise<void> {
     await this.db.prepare("DELETE FROM standups WHERE id = ?").bind(id).run();
+  }
+
+  async setLastRetroDate(standupId: number, date: string): Promise<void> {
+    await this.db.prepare("UPDATE standups SET last_retro_date = ? WHERE id = ?").bind(date, standupId).run();
   }
 
   async listParticipants(standupId: number): Promise<Participant[]> {

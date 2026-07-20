@@ -11,11 +11,15 @@ function quote(text: string): string {
     .join("\n");
 }
 
+/** Streak counts worth celebrating inline in the digest. */
+const STREAK_MILESTONES = new Set([3, 5, 10, 25, 50, 100, 250]);
+
 export function buildDigest(
   standup: Standup,
   run: Run,
   responses: CheckinResponse[],
   participants: Participant[],
+  streaks: Record<string, number> = {},
 ): { text: string; blocks: unknown[] } {
   const blocks: unknown[] = [
     { type: "header", text: { type: "plain_text", text: `☀️ ${standup.name} — ${formatRunDate(run.runDate)}` } },
@@ -34,10 +38,12 @@ export function buildDigest(
       })
       .filter(Boolean)
       .join("\n");
+    const streak = streaks[response.userId] ?? 0;
+    const flame = STREAK_MILESTONES.has(streak) ? `   🔥 *${streak}-day streak!*` : "";
     blocks.push({ type: "divider" });
     blocks.push({
       type: "section",
-      text: { type: "mrkdwn", text: `*<@${response.userId}>*\n${body}`.slice(0, 3000) },
+      text: { type: "mrkdwn", text: `*<@${response.userId}>*${flame}\n${body}`.slice(0, 3000) },
     });
   }
 

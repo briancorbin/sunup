@@ -18,6 +18,8 @@ export interface Standup {
   /** Minutes before digestTime to nudge non-responders. 0 disables reminders. */
   reminderMinutes: number;
   includeMood: boolean;
+  /** "YYYY-MM-DD" the last weekly retro posted for (standup tz); null = never. */
+  lastRetroDate: string | null;
 }
 
 export interface Participant {

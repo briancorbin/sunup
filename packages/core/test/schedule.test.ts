@@ -1,7 +1,17 @@
 import { describe, expect, it } from "vitest";
 import { computeDuePrompts } from "../src/cron";
 import { localParts, parseHM } from "../src/time";
-import { computeStreak, isBlocker, type Participant, type Standup } from "../src/index";
+import {
+  addDays,
+  computeStreak,
+  isBlocker,
+  lastScheduledDay,
+  makeExportToken,
+  toCsv,
+  verifyExportToken,
+  type Participant,
+  type Standup,
+} from "../src/index";
 import { buildDigest } from "../src/blocks/digest";
 
 const standup: Standup = {
@@ -16,6 +26,7 @@ const standup: Standup = {
   userTzPrompts: true,
   reminderMinutes: 60,
   includeMood: true,
+  lastRetroDate: null,
 };
 
 const participants: Participant[] = [
@@ -103,6 +114,46 @@ describe("computeStreak", () => {
     expect(computeStreak(history, "2026-07-20")).toBe(2);
     // Same history on a later day: the missed 07-20 now breaks it.
     expect(computeStreak(history, "2026-07-21")).toBe(0);
+  });
+});
+
+describe("week helpers", () => {
+  it("addDays does calendar math across month boundaries", () => {
+    expect(addDays("2026-07-20", -6)).toBe("2026-07-14");
+    expect(addDays("2026-07-31", 1)).toBe("2026-08-01");
+  });
+
+  it("lastScheduledDay uses a Monday-start week", () => {
+    expect(lastScheduledDay([1, 2, 3, 4, 5])).toBe(5); // Mon–Fri → Friday
+    expect(lastScheduledDay([1, 3, 5])).toBe(5);
+    expect(lastScheduledDay([0, 2])).toBe(0); // Sunday is the END of the week
+  });
+});
+
+describe("export", () => {
+  it("round-trips a valid token and rejects tampering/expiry", async () => {
+    const token = await makeExportToken("secret", 42, 1000);
+    expect(await verifyExportToken("secret", token, 999)).toBe(42);
+    expect(await verifyExportToken("secret", token, 1001)).toBeNull(); // expired
+    expect(await verifyExportToken("other", token, 999)).toBeNull(); // wrong key
+    expect(await verifyExportToken("secret", token.replace("42", "43"), 999)).toBeNull(); // tampered
+  });
+
+  it("escapes CSV cells and neutralizes formula injection", () => {
+    const csv = toCsv(standup, [
+      {
+        runDate: "2026-07-20",
+        response: {
+          runId: 1,
+          userId: "U1",
+          answers: ['said "done", shipped', "=HYPERLINK(evil)", "none"],
+          mood: 4,
+          submittedAt: "2026-07-20T13:00:00Z",
+        },
+      },
+    ]);
+    expect(csv).toContain('"said ""done"", shipped"');
+    expect(csv).toContain("'=HYPERLINK(evil)");
   });
 });
 

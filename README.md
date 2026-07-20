@@ -26,6 +26,8 @@
 - **😴 Vacation mode** — `/sunup snooze 5` pauses prompts and keeps you out of "waiting on" lists.
 - **🎉 Kudos** — `/kudos @teammate for shipping the thing` posts a celebration and feeds a 30-day leaderboard.
 - **📈 Mood pulse** — an optional 1–5 mood question, shown in the digest only as a team average (and only with 3+ responses).
+- **📆 Weekly retro** — on the week's last scheduled day, a summary posts after the digest: participation by day, mood trend, every blocker from the week, kudos totals, and streak leaders.
+- **📄 CSV export** — `/sunup export` gives a 15-minute signed download link for the channel's full history. No extra Slack scopes; your own Worker serves it.
 - **🏠 Dashboard** — click sunup in your sidebar: today's status, streaks, team participation history, and the kudos leaderboard, right in Slack's App Home.
 
 **Privacy by design:** sunup requests *no message-reading scopes*. It only ever sees what people type into its own forms. Scopes: `chat:write`, `commands`, `im:write`, `users:read` (the last one just for timezones).
@@ -97,6 +99,7 @@ Teammates run `/sunup join`. That's it. `/sunup help` shows everything else:
 | `/sunup config <field> <value>` | `prompt 08:30`, `digest 12:00`, `days mon,wed,fri`, `tz Europe/London`, `reminder 30`, `mood off`, `name Standup` |
 | `/sunup questions Q1 \| Q2 \| Q3` | Set custom questions (the last is the blockers question) |
 | `/sunup snooze 5` / `snooze off` | Vacation mode — pause your prompts, skip "waiting on" |
+| `/sunup export` | CSV of the channel's full check-in history (15-min signed link) |
 | `/sunup remove` | Delete the channel's check-in and its history (asks to confirm) |
 | `/kudos @user <message>` | Celebrate a teammate |
 

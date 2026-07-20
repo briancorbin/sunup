@@ -47,6 +47,13 @@ export function isValidTimezone(tz: string): boolean {
   }
 }
 
+/** "YYYY-MM-DD" plus/minus whole days (calendar math, timezone-free). */
+export function addDays(date: string, days: number): string {
+  const d = new Date(`${date}T12:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + days);
+  return d.toISOString().slice(0, 10);
+}
+
 /** Human "Mon, Jun 2" style label for a "YYYY-MM-DD" run date. */
 export function formatRunDate(runDate: string): string {
   const d = new Date(`${runDate}T12:00:00Z`);

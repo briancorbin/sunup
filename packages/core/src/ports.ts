@@ -19,9 +19,10 @@ export interface Storage {
   listStandups(): Promise<Standup[]>;
   getStandup(id: number): Promise<Standup | null>;
   getStandupByChannel(channelId: string): Promise<Standup | null>;
-  createStandup(input: Omit<Standup, "id">): Promise<Standup>;
+  createStandup(input: Omit<Standup, "id" | "lastRetroDate">): Promise<Standup>;
   updateStandup(standup: Standup): Promise<void>;
   deleteStandup(id: number): Promise<void>;
+  setLastRetroDate(standupId: number, date: string): Promise<void>;
 
   // participants
   listParticipants(standupId: number): Promise<Participant[]>;
