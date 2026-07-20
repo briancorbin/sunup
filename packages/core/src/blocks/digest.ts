@@ -1,0 +1,75 @@
+import type { CheckinResponse, Participant, Run, Standup } from "../types";
+import { isBlocker } from "../types";
+import { formatRunDate } from "../time";
+
+const MOOD_EMOJI: Record<number, string> = { 1: "😫", 2: "😕", 3: "😐", 4: "🙂", 5: "😄" };
+
+function quote(text: string): string {
+  return text
+    .split("\n")
+    .map((line) => `> ${line}`)
+    .join("\n");
+}
+
+export function buildDigest(
+  standup: Standup,
+  run: Run,
+  responses: CheckinResponse[],
+  participants: Participant[],
+): { text: string; blocks: unknown[] } {
+  const blocks: unknown[] = [
+    { type: "header", text: { type: "plain_text", text: `☀️ ${standup.name} — ${formatRunDate(run.runDate)}` } },
+  ];
+
+  if (responses.length === 0) {
+    blocks.push({ type: "section", text: { type: "mrkdwn", text: "_No check-ins were submitted today._" } });
+  }
+
+  for (const response of responses) {
+    const body = standup.questions
+      .map((question, i) => {
+        const answer = response.answers[i]?.trim();
+        if (!answer) return null;
+        return `*${question}*\n${quote(answer)}`;
+      })
+      .filter(Boolean)
+      .join("\n");
+    blocks.push({ type: "divider" });
+    blocks.push({
+      type: "section",
+      text: { type: "mrkdwn", text: `*<@${response.userId}>*\n${body}`.slice(0, 3000) },
+    });
+  }
+
+  // Blockers get their own section so leads can scan for them.
+  const blockersIdx = standup.questions.length - 1;
+  const blocked = responses.filter((r) => isBlocker(r.answers[blockersIdx] ?? ""));
+  if (blocked.length > 0) {
+    blocks.push({ type: "divider" });
+    blocks.push({
+      type: "section",
+      text: {
+        type: "mrkdwn",
+        text: `🚧 *Blockers*\n${blocked.map((r) => `• <@${r.userId}>: ${(r.answers[blockersIdx] ?? "").split("\n")[0]}`).join("\n")}`.slice(0, 3000),
+      },
+    });
+  }
+
+  const contextLines: string[] = [];
+  const responded = new Set(responses.map((r) => r.userId));
+  const missing = participants.filter((p) => !responded.has(p.userId));
+  if (missing.length > 0 && responses.length > 0) {
+    contextLines.push(`Waiting on: ${missing.map((p) => `<@${p.userId}>`).join(", ")}`);
+  }
+  const moods = responses.map((r) => r.mood).filter((m): m is number => m != null);
+  if (moods.length >= 3) {
+    // Only show mood with 3+ datapoints so it stays semi-anonymous.
+    const avg = moods.reduce((a, b) => a + b, 0) / moods.length;
+    contextLines.push(`Team mood: ${MOOD_EMOJI[Math.round(avg)] ?? "😐"} ${avg.toFixed(1)}/5`);
+  }
+  if (contextLines.length > 0) {
+    blocks.push({ type: "context", elements: [{ type: "mrkdwn", text: contextLines.join("   •   ") }] });
+  }
+
+  return { text: `${standup.name} digest for ${formatRunDate(run.runDate)}`, blocks };
+}

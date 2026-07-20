@@ -1,0 +1,44 @@
+# Slack app manifest for sunup.
+# Replace YOUR-WORKER-URL with your deployed Worker URL (e.g. https://sunup.<you>.workers.dev)
+# then create the app at https://api.slack.com/apps → "Create New App" → "From a manifest".
+display_information:
+  name: Sunup
+  description: Async daily check-ins, digests, and kudos — open source and self-hosted.
+  background_color: "#e8a33d"
+features:
+  bot_user:
+    display_name: Sunup
+    always_online: true
+  app_home:
+    home_tab_enabled: true
+    messages_tab_enabled: true
+    messages_tab_read_only_enabled: true
+  slash_commands:
+    - command: /sunup
+      url: https://YOUR-WORKER-URL/
+      description: Submit your check-in, or manage this channel's check-in
+      usage_hint: "[setup | join | leave | status | config | questions | help]"
+      should_escape: false
+    - command: /kudos
+      url: https://YOUR-WORKER-URL/
+      description: Give a teammate kudos
+      usage_hint: "@teammate for being awesome"
+      should_escape: true
+oauth_config:
+  scopes:
+    bot:
+      - chat:write
+      - commands
+      - im:write
+      - users:read
+settings:
+  event_subscriptions:
+    request_url: https://YOUR-WORKER-URL/
+    bot_events:
+      - app_home_opened
+  interactivity:
+    is_enabled: true
+    request_url: https://YOUR-WORKER-URL/
+  org_deploy_enabled: false
+  socket_mode_enabled: false
+  token_rotation_enabled: false

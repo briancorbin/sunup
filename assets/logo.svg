@@ -1,0 +1,41 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 160" width="240" height="160">
+  <!-- sunup: a robin perched on the rising sun. Placeholder mark — refine at will. -->
+  <defs>
+    <clipPath id="horizon"><rect x="0" y="0" width="240" height="118"/></clipPath>
+  </defs>
+  <!-- sun rays -->
+  <g stroke="#f2b544" stroke-width="6" stroke-linecap="round" clip-path="url(#horizon)">
+    <line x1="120" y1="30" x2="120" y2="14"/>
+    <line x1="72" y1="48" x2="60" y2="36"/>
+    <line x1="168" y1="48" x2="180" y2="36"/>
+    <line x1="52" y1="92" x2="34" y2="88"/>
+    <line x1="188" y1="92" x2="206" y2="88"/>
+  </g>
+  <!-- rising sun -->
+  <path d="M 56 118 A 64 64 0 0 1 184 118 Z" fill="#f2a33c"/>
+  <!-- horizon line -->
+  <line x1="16" y1="118" x2="224" y2="118" stroke="#3d3a34" stroke-width="6" stroke-linecap="round"/>
+  <!-- robin, standing on the horizon in front of the sun's left edge -->
+  <g transform="translate(64 72)">
+    <defs>
+      <clipPath id="body"><ellipse cx="0" cy="22" rx="18" ry="15"/></clipPath>
+    </defs>
+    <!-- legs (drawn first, feet on the horizon) -->
+    <line x1="-4" y1="34" x2="-4" y2="46" stroke="#3d3a34" stroke-width="2.5" stroke-linecap="round"/>
+    <line x1="5" y1="34" x2="5" y2="46" stroke="#3d3a34" stroke-width="2.5" stroke-linecap="round"/>
+    <!-- tail -->
+    <path d="M -12 16 L -34 26 L -28 32 L -10 26 Z" fill="#4a4640"/>
+    <!-- body -->
+    <ellipse cx="0" cy="22" rx="18" ry="15" fill="#4a4640"/>
+    <!-- red breast (clipped to the body) -->
+    <circle cx="11" cy="31" r="15" fill="#d95d39" clip-path="url(#body)"/>
+    <!-- head -->
+    <circle cx="12" cy="6" r="10" fill="#4a4640"/>
+    <!-- red face patch -->
+    <path d="M 16 -1 A 10 10 0 0 1 21 11 L 12 8 Z" fill="#d95d39"/>
+    <!-- beak -->
+    <path d="M 21 4 L 31 7 L 21 10 Z" fill="#e8a33d"/>
+    <!-- eye -->
+    <circle cx="13" cy="3.5" r="1.9" fill="#fffdf7"/>
+  </g>
+</svg>

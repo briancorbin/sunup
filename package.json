@@ -1,0 +1,16 @@
+{
+  "name": "sunup",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Open-source async daily check-ins for Slack — self-hosted, free, and portable.",
+  "license": "MIT",
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "scripts": {
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "test": "npm run test --workspaces --if-present",
+    "deploy": "npm run deploy --workspace apps/cloudflare"
+  }
+}
