@@ -131,6 +131,8 @@ npm test            # core unit tests (vitest)
 npm run dev --workspace apps/cloudflare   # local Worker (pair with a tunnel for Slack callbacks)
 ```
 
+**Demo data:** want the dashboard and digests to look lived-in without waiting three weeks? `apps/cloudflare/scripts/seed-demo.mjs` generates a fake 4-engineer team with realistic check-in history, blockers, moods, and kudos around your real standup (see its header for usage; `--cleanup` emits the SQL to remove it all).
+
 For live Slack callbacks against a dev instance, either deploy a second Worker (e.g. `sunup-dev`) or run `wrangler dev` behind a tunnel (`cloudflared tunnel --url http://localhost:8787`) and point a dev Slack app's URLs at it.
 
 ## License

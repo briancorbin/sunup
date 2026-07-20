@@ -71,12 +71,23 @@ async function tickStandup(deps: Deps, standup: Standup, now: Date): Promise<voi
   const responded = new Set(responses.map((r) => r.userId));
   const state = new Map(runParticipants.map((rp) => [rp.userId, rp]));
 
+  // A failed DM (deactivated user, demo data, revoked scope) must not abort the
+  // standup's tick — and we mark the user handled either way: prompt-once
+  // semantics beat retrying a dead recipient every tick.
+  const sendDm = async (userId: string, isReminder: boolean): Promise<void> => {
+    try {
+      const dm = await deps.slack.openDm(userId);
+      const msg = buildPromptMessage(standup, run.id, isReminder);
+      await deps.slack.postMessage(dm, msg.text, msg.blocks);
+    } catch (err) {
+      console.error(`sunup cron: ${isReminder ? "reminder" : "prompt"} DM to ${userId} failed`, err);
+    }
+  };
+
   // Initial prompts
   for (const p of duePrompts) {
     if (state.get(p.userId)?.promptedAt || responded.has(p.userId)) continue;
-    const dm = await deps.slack.openDm(p.userId);
-    const msg = buildPromptMessage(standup, run.id, false);
-    await deps.slack.postMessage(dm, msg.text, msg.blocks);
+    await sendDm(p.userId, false);
     await deps.storage.markPrompted(run.id, p.userId, nowIso);
   }
 
@@ -85,9 +96,7 @@ async function tickStandup(deps: Deps, standup: Standup, now: Date): Promise<voi
     for (const p of participants) {
       const rp = state.get(p.userId);
       if (!rp?.promptedAt || rp.remindedAt || responded.has(p.userId)) continue;
-      const dm = await deps.slack.openDm(p.userId);
-      const msg = buildPromptMessage(standup, run.id, true);
-      await deps.slack.postMessage(dm, msg.text, msg.blocks);
+      await sendDm(p.userId, true);
       await deps.storage.markReminded(run.id, p.userId, nowIso);
     }
   }
