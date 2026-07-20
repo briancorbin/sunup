@@ -22,7 +22,8 @@
 - **☀️ Async check-ins** — at a time you choose, sunup DMs each participant a prompt. They answer a short form (configurable questions) whenever suits them — each person is prompted at the chosen hour *in their own timezone*.
 - **📰 Channel digest** — at digest time, one tidy message summarizes everyone's answers in the team channel.
 - **🚧 Blocker surfacing** — blockers get their own highlighted section in the digest, so leads can scan for them.
-- **⏰ Nudges** — non-responders get one friendly reminder before the digest posts.
+- **⏰ Nudges** — non-responders get one friendly reminder before the digest posts. Check in late anyway? The posted digest updates in place to include you.
+- **😴 Vacation mode** — `/sunup snooze 5` pauses prompts and keeps you out of "waiting on" lists.
 - **🎉 Kudos** — `/kudos @teammate for shipping the thing` posts a celebration and feeds a 30-day leaderboard.
 - **📈 Mood pulse** — an optional 1–5 mood question, shown in the digest only as a team average (and only with 3+ responses).
 - **🏠 Dashboard** — click sunup in your sidebar: today's status, streaks, team participation history, and the kudos leaderboard, right in Slack's App Home.
@@ -95,6 +96,7 @@ Teammates run `/sunup join`. That's it. `/sunup help` shows everything else:
 | `/sunup status` | Show the channel's check-in config |
 | `/sunup config <field> <value>` | `prompt 08:30`, `digest 12:00`, `days mon,wed,fri`, `tz Europe/London`, `reminder 30`, `mood off`, `name Standup` |
 | `/sunup questions Q1 \| Q2 \| Q3` | Set custom questions (the last is the blockers question) |
+| `/sunup snooze 5` / `snooze off` | Vacation mode — pause your prompts, skip "waiting on" |
 | `/sunup remove` | Delete the channel's check-in and its history (asks to confirm) |
 | `/kudos @user <message>` | Celebrate a teammate |
 

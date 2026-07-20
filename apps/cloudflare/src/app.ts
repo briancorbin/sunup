@@ -14,6 +14,7 @@ import {
   handleQuestions,
   handleRemove,
   handleSetup,
+  handleSnooze,
   handleStatus,
   openCheckinModal,
   openCheckinModalForRun,
@@ -83,6 +84,8 @@ export function buildApp(env: Env): SlackApp<Env> {
         }
         case "questions":
           return respond(await handleQuestions(deps, channelId, argText));
+        case "snooze":
+          return respond(await handleSnooze(deps, channelId, userId, argText.toLowerCase(), new Date()));
         case "remove":
         case "delete":
           return respond(await handleRemove(deps, channelId, argText.toLowerCase() === "confirm"));

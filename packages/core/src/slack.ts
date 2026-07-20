@@ -25,6 +25,10 @@ export class SlackClient {
     return this.call("chat.postMessage", { channel, text, ...(blocks ? { blocks } : {}) });
   }
 
+  updateMessage(channel: string, ts: string, text: string, blocks?: unknown[]): Promise<unknown> {
+    return this.call("chat.update", { channel, ts, text, ...(blocks ? { blocks } : {}) });
+  }
+
   postEphemeral(channel: string, user: string, text: string): Promise<unknown> {
     return this.call("chat.postEphemeral", { channel, user, text });
   }

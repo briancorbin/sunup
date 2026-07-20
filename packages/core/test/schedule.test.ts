@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { computeDuePrompts } from "../src/cron";
 import { localParts, parseHM } from "../src/time";
-import { isBlocker, type Participant, type Standup } from "../src/index";
+import { computeStreak, isBlocker, type Participant, type Standup } from "../src/index";
 import { buildDigest } from "../src/blocks/digest";
 
 const standup: Standup = {
@@ -19,10 +19,10 @@ const standup: Standup = {
 };
 
 const participants: Participant[] = [
-  { standupId: 1, userId: "U_NYC", tz: "America/New_York" },
-  { standupId: 1, userId: "U_LON", tz: "Europe/London" },
-  { standupId: 1, userId: "U_SFO", tz: "America/Los_Angeles" },
-  { standupId: 1, userId: "U_NOTZ", tz: null },
+  { standupId: 1, userId: "U_NYC", tz: "America/New_York", snoozedUntil: null },
+  { standupId: 1, userId: "U_LON", tz: "Europe/London", snoozedUntil: null },
+  { standupId: 1, userId: "U_SFO", tz: "America/Los_Angeles", snoozedUntil: null },
+  { standupId: 1, userId: "U_NOTZ", tz: null, snoozedUntil: null },
 ];
 
 describe("localParts", () => {
@@ -63,6 +63,17 @@ describe("computeDuePrompts", () => {
     expect(due).toContain("U_NOTZ");
   });
 
+  it("skips snoozed participants until their snooze expires", () => {
+    const now = new Date("2026-07-20T13:05:00Z");
+    const snoozed: Participant[] = [
+      { standupId: 1, userId: "U_PTO", tz: "America/New_York", snoozedUntil: "2026-07-24" },
+      { standupId: 1, userId: "U_BACK", tz: "America/New_York", snoozedUntil: "2026-07-19" },
+    ];
+    const due = computeDuePrompts(now, standup, snoozed, "2026-07-20").map((p) => p.userId);
+    expect(due).not.toContain("U_PTO");
+    expect(due).toContain("U_BACK");
+  });
+
   it("does not prompt for a different anchor date", () => {
     // London has rolled into Tuesday; anchor date is still Monday in NYC.
     const now = new Date("2026-07-21T00:30:00Z");
@@ -80,8 +91,23 @@ describe("isBlocker", () => {
   });
 });
 
+describe("computeStreak", () => {
+  it("counts consecutive responded runs, most recent first", () => {
+    const history = [
+      { runDate: "2026-07-20", responded: false }, // today, still open — doesn't break
+      { runDate: "2026-07-17", responded: true },
+      { runDate: "2026-07-16", responded: true },
+      { runDate: "2026-07-15", responded: false },
+      { runDate: "2026-07-14", responded: true },
+    ];
+    expect(computeStreak(history, "2026-07-20")).toBe(2);
+    // Same history on a later day: the missed 07-20 now breaks it.
+    expect(computeStreak(history, "2026-07-21")).toBe(0);
+  });
+});
+
 describe("buildDigest", () => {
-  const run = { id: 10, standupId: 1, runDate: "2026-07-20", digestPostedAt: null };
+  const run = { id: 10, standupId: 1, runDate: "2026-07-20", digestPostedAt: null, digestTs: null };
 
   it("surfaces blockers and non-responders", () => {
     const digest = buildDigest(

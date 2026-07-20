@@ -1,6 +1,6 @@
 import type { Storage } from "./ports";
 import { SlackClient } from "./slack";
-import type { Participant, Standup } from "./types";
+import { isSnoozed, type Participant, type Standup } from "./types";
 import { localParts, parseHM } from "./time";
 import { buildDigest } from "./blocks/digest";
 import { buildPromptMessage } from "./blocks/checkin-modal";
@@ -26,6 +26,7 @@ export function computeDuePrompts(now: Date, standup: Standup, participants: Par
   const promptM = parseHM(standup.promptTime);
   if (promptM == null) return [];
   return participants.filter((p) => {
+    if (isSnoozed(p, anchorDate)) return false;
     const local = localParts(now, promptTz(standup, p));
     return local.date === anchorDate && local.minutes >= promptM;
   });
@@ -101,10 +102,11 @@ async function tickStandup(deps: Deps, standup: Standup, now: Date): Promise<voi
     }
   }
 
-  // Digest
+  // Digest — snoozed participants don't count as "waiting on"
   if (digestDue && !run.digestPostedAt) {
-    const digest = buildDigest(standup, run, responses, participants);
-    await deps.slack.postMessage(standup.channelId, digest.text, digest.blocks);
-    await deps.storage.markDigestPosted(run.id, nowIso);
+    const active = participants.filter((p) => !isSnoozed(p, anchor.date));
+    const digest = buildDigest(standup, run, responses, active);
+    const posted = await deps.slack.postMessage(standup.channelId, digest.text, digest.blocks);
+    await deps.storage.markDigestPosted(run.id, nowIso, posted.ts ?? null);
   }
 }

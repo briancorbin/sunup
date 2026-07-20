@@ -29,12 +29,14 @@ export interface Storage {
   addParticipant(standupId: number, userId: string, tz: string | null): Promise<void>;
   removeParticipant(standupId: number, userId: string): Promise<void>;
   setParticipantTz(userId: string, tz: string): Promise<void>;
+  /** null clears the snooze. */
+  setSnooze(standupId: number, userId: string, until: string | null): Promise<void>;
 
   // runs
   getOrCreateRun(standupId: number, runDate: string): Promise<Run>;
   getRun(standupId: number, runDate: string): Promise<Run | null>;
   getRunById(runId: number): Promise<Run | null>;
-  markDigestPosted(runId: number, at: string): Promise<void>;
+  markDigestPosted(runId: number, at: string, messageTs: string | null): Promise<void>;
   listRunParticipants(runId: number): Promise<RunParticipant[]>;
   markPrompted(runId: number, userId: string, at: string): Promise<void>;
   markReminded(runId: number, userId: string, at: string): Promise<void>;
@@ -47,6 +49,8 @@ export interface Storage {
   listUserRunHistory(standupId: number, userId: string, limit: number): Promise<Array<{ runDate: string; responded: boolean }>>;
   /** Most-recent-first run summaries for participation stats. */
   listRecentRuns(standupId: number, limit: number): Promise<RunSummary[]>;
+  /** Most-recent-first responses across recent runs, tagged with their run date. */
+  listRecentResponses(standupId: number, limit: number): Promise<Array<{ runDate: string; response: CheckinResponse }>>;
 
   // kudos
   addKudos(kudos: Kudos): Promise<void>;

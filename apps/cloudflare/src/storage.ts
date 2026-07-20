@@ -45,10 +45,17 @@ interface RunRow {
   standup_id: number;
   run_date: string;
   digest_posted_at: string | null;
+  digest_ts: string | null;
 }
 
 function rowToRun(row: RunRow): Run {
-  return { id: row.id, standupId: row.standup_id, runDate: row.run_date, digestPostedAt: row.digest_posted_at };
+  return {
+    id: row.id,
+    standupId: row.standup_id,
+    runDate: row.run_date,
+    digestPostedAt: row.digest_posted_at,
+    digestTs: row.digest_ts,
+  };
 }
 
 interface ResponseRow {
@@ -136,10 +143,10 @@ export class D1Storage implements Storage {
 
   async listParticipants(standupId: number): Promise<Participant[]> {
     const { results } = await this.db
-      .prepare("SELECT standup_id, user_id, tz FROM participants WHERE standup_id = ?")
+      .prepare("SELECT standup_id, user_id, tz, snoozed_until FROM participants WHERE standup_id = ?")
       .bind(standupId)
-      .all<{ standup_id: number; user_id: string; tz: string | null }>();
-    return results.map((r) => ({ standupId: r.standup_id, userId: r.user_id, tz: r.tz }));
+      .all<{ standup_id: number; user_id: string; tz: string | null; snoozed_until: string | null }>();
+    return results.map((r) => ({ standupId: r.standup_id, userId: r.user_id, tz: r.tz, snoozedUntil: r.snoozed_until }));
   }
 
   async listStandupsForUser(userId: string): Promise<Standup[]> {
@@ -167,6 +174,13 @@ export class D1Storage implements Storage {
     await this.db.prepare("UPDATE participants SET tz = ? WHERE user_id = ?").bind(tz, userId).run();
   }
 
+  async setSnooze(standupId: number, userId: string, until: string | null): Promise<void> {
+    await this.db
+      .prepare("UPDATE participants SET snoozed_until = ? WHERE standup_id = ? AND user_id = ?")
+      .bind(until, standupId, userId)
+      .run();
+  }
+
   async getOrCreateRun(standupId: number, runDate: string): Promise<Run> {
     await this.db
       .prepare("INSERT OR IGNORE INTO runs (standup_id, run_date) VALUES (?, ?)")
@@ -190,8 +204,8 @@ export class D1Storage implements Storage {
     return row ? rowToRun(row) : null;
   }
 
-  async markDigestPosted(runId: number, at: string): Promise<void> {
-    await this.db.prepare("UPDATE runs SET digest_posted_at = ? WHERE id = ?").bind(at, runId).run();
+  async markDigestPosted(runId: number, at: string, messageTs: string | null): Promise<void> {
+    await this.db.prepare("UPDATE runs SET digest_posted_at = ?, digest_ts = ? WHERE id = ?").bind(at, messageTs, runId).run();
   }
 
   async listRunParticipants(runId: number): Promise<RunParticipant[]> {
@@ -266,6 +280,18 @@ export class D1Storage implements Storage {
       .bind(standupId, limit)
       .all<{ run_date: string; digest_posted_at: string | null; response_count: number }>();
     return results.map((r) => ({ runDate: r.run_date, digestPostedAt: r.digest_posted_at, responseCount: r.response_count }));
+  }
+
+  async listRecentResponses(standupId: number, limit: number): Promise<Array<{ runDate: string; response: CheckinResponse }>> {
+    const { results } = await this.db
+      .prepare(
+        `SELECT r.run_date, x.run_id, x.user_id, x.answers, x.mood, x.submitted_at
+         FROM responses x JOIN runs r ON r.id = x.run_id
+         WHERE r.standup_id = ? ORDER BY r.run_date DESC, x.submitted_at DESC LIMIT ?`,
+      )
+      .bind(standupId, limit)
+      .all<ResponseRow & { run_date: string }>();
+    return results.map((r) => ({ runDate: r.run_date, response: rowToResponse(r) }));
   }
 
   async addKudos(kudos: Kudos): Promise<void> {

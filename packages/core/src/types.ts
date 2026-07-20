@@ -25,6 +25,13 @@ export interface Participant {
   userId: string;
   /** Cached Slack timezone (IANA), refreshed opportunistically. */
   tz: string | null;
+  /** "YYYY-MM-DD" (standup tz): skip prompts/reminders/waiting-on through this date. */
+  snoozedUntil: string | null;
+}
+
+/** True when the participant is snoozed on the given run date. */
+export function isSnoozed(p: Participant, runDate: string): boolean {
+  return p.snoozedUntil != null && p.snoozedUntil >= runDate;
 }
 
 /** One occurrence of a standup on a given calendar day. */
@@ -34,6 +41,8 @@ export interface Run {
   /** "YYYY-MM-DD" in the standup timezone. */
   runDate: string;
   digestPostedAt: string | null;
+  /** Slack ts of the posted digest message, for in-place updates. */
+  digestTs: string | null;
 }
 
 /** Per-user delivery state for a run. */

@@ -10,6 +10,8 @@ export interface HomeStandupStats {
   /** Participation over recent runs, e.g. [{runDate, responseCount}] with team size. */
   recentRuns: Array<{ runDate: string; responseCount: number }>;
   teamSize: number;
+  /** Most recent unresolved-looking blockers across the team. */
+  recentBlockers: Array<{ runDate: string; userId: string; blocker: string }>;
 }
 
 export function buildHomeView(userId: string, stats: HomeStandupStats[], leaderboard: LeaderboardEntry[]): unknown {
@@ -53,6 +55,17 @@ export function buildHomeView(userId: string, stats: HomeStandupStats[], leaderb
         ].join("\n"),
       },
     });
+    if (s.recentBlockers.length > 0) {
+      blocks.push({
+        type: "section",
+        text: {
+          type: "mrkdwn",
+          text: `🚧 *Recent blockers*\n${s.recentBlockers
+            .map((b) => `• \`${b.runDate.slice(5)}\` <@${b.userId}>: ${b.blocker}`)
+            .join("\n")}`.slice(0, 3000),
+        },
+      });
+    }
   }
 
   blocks.push({ type: "divider" });

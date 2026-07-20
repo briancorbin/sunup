@@ -1,6 +1,7 @@
 import type { Deps } from "./cron";
 import type { CheckinResponse, Standup } from "./types";
-import { DEFAULT_QUESTIONS, DEFAULT_STANDUP } from "./types";
+import { DEFAULT_QUESTIONS, DEFAULT_STANDUP, isBlocker, isSnoozed } from "./types";
+import { buildDigest } from "./blocks/digest";
 import { isValidTimezone, localParts, parseHM } from "./time";
 import { buildCheckinModal, type CheckinModalMetadata } from "./blocks/checkin-modal";
 import { buildHomeView, type HomeStandupStats } from "./blocks/home";
@@ -16,6 +17,7 @@ export const HELP_TEXT = [
   "`/sunup join` / `/sunup leave` — manage your participation",
   "`/sunup status` — show this channel's check-in config",
   "`/sunup config <field> <value>` — fields: `prompt HH:MM`, `digest HH:MM`, `days mon,tue,...`, `tz <IANA>`, `reminder <minutes>`, `mood on|off`, `name <text>`",
+  "`/sunup snooze <days>` / `/sunup snooze off` — pause your prompts (vacation mode)",
   "`/sunup remove` — delete this channel's check-in (asks for confirmation)",
   "`/sunup questions Q1 | Q2 | Q3` — set questions (last one is the blockers question)",
   "`/kudos @user <message>` — celebrate a teammate",
@@ -212,10 +214,67 @@ export function parseCheckinSubmission(
   };
 }
 
+/**
+ * Consecutive most-recent runs with a response, given most-recent-first
+ * history. Today's still-open run doesn't break the streak before the digest.
+ */
+export function computeStreak(history: Array<{ runDate: string; responded: boolean }>, todayDate: string): number {
+  let streak = 0;
+  for (const h of history) {
+    if (h.runDate === todayDate && !h.responded) continue;
+    if (!h.responded) break;
+    streak++;
+  }
+  return streak;
+}
+
 export async function handleCheckinSubmission(deps: Deps, standup: Standup, response: CheckinResponse): Promise<void> {
   await deps.storage.upsertResponse(response);
+
+  // Late check-in? Rebuild the already-posted digest in place.
+  const run = await deps.storage.getRunById(response.runId);
+  let lateNote = "";
+  if (run?.digestPostedAt && run.digestTs) {
+    try {
+      const responses = await deps.storage.listResponses(run.id);
+      const participants = (await deps.storage.listParticipants(standup.id)).filter((p) => !isSnoozed(p, run.runDate));
+      const digest = buildDigest(standup, run, responses, participants);
+      await deps.slack.updateMessage(standup.channelId, run.digestTs, digest.text, digest.blocks);
+      lateNote = " Today's digest already went out — I've updated it to include you.";
+    } catch (err) {
+      console.error("sunup: late digest update failed", err);
+    }
+  }
+
+  const history = await deps.storage.listUserRunHistory(standup.id, response.userId, 30);
+  const streak = computeStreak(history, run?.runDate ?? "");
+  const streakNote = streak >= 2 ? `  🔥 That's a *${streak}-day streak*.` : "";
   const dm = await deps.slack.openDm(response.userId);
-  await deps.slack.postMessage(dm, `✅ Check-in recorded. The digest posts in <#${standup.channelId}> at ${standup.digestTime} ${standup.timezone}.`);
+  await deps.slack.postMessage(
+    dm,
+    `✅ Check-in recorded.${lateNote || ` The digest posts in <#${standup.channelId}> at ${standup.digestTime} ${standup.timezone}.`}${streakNote}`,
+  );
+}
+
+/** `/sunup snooze <days|off>` — pause the invoker's prompts for this channel's standup. */
+export async function handleSnooze(deps: Deps, channelId: string, userId: string, arg: string, now: Date): Promise<string> {
+  const standup = await deps.storage.getStandupByChannel(channelId);
+  if (!standup) return "No check-in in this channel yet — create one with `/sunup setup`.";
+  const participants = await deps.storage.listParticipants(standup.id);
+  if (!participants.some((p) => p.userId === userId)) return "You're not part of this check-in — `/sunup join` first.";
+
+  if (arg === "off" || arg === "resume") {
+    await deps.storage.setSnooze(standup.id, userId, null);
+    return `☀️ Welcome back! Prompts for *${standup.name}* resume on the next scheduled day.`;
+  }
+  const days = Number(arg);
+  if (!Number.isInteger(days) || days < 1 || days > 365) {
+    return "Usage: `/sunup snooze <days>` (e.g. `/sunup snooze 5`) or `/sunup snooze off`.";
+  }
+  const until = new Date(now.getTime() + days * 24 * 60 * 60 * 1000);
+  const untilDate = localParts(until, standup.timezone).date;
+  await deps.storage.setSnooze(standup.id, userId, untilDate);
+  return `😴 Snoozed — no *${standup.name}* prompts through *${untilDate}*, and you won't show as "waiting on" in digests. \`/sunup snooze off\` to come back early.`;
 }
 
 const MENTION_RE = /<@([UW][A-Z0-9]+)(?:\|[^>]*)?>/;
@@ -243,19 +302,23 @@ export async function publishHome(deps: Deps, userId: string, now: Date): Promis
     const todayRun = runToday ? await deps.storage.getRun(standup.id, anchor.date) : null;
     const respondedToday = todayRun ? (await deps.storage.getResponse(todayRun.id, userId)) != null : false;
     const history = await deps.storage.listUserRunHistory(standup.id, userId, 30);
-    let streak = 0;
-    for (const h of history) {
-      // Today's still-open run shouldn't break a streak before the digest.
-      if (h.runDate === anchor.date && !h.responded) continue;
-      if (!h.responded) break;
-      streak++;
-    }
+    const streak = computeStreak(history, anchor.date);
     const participants = await deps.storage.listParticipants(standup.id);
     const recentRuns = (await deps.storage.listRecentRuns(standup.id, 7)).map((r) => ({
       runDate: r.runDate,
       responseCount: r.responseCount,
     }));
-    stats.push({ standup, respondedToday, runToday, streak, recentRuns, teamSize: participants.length });
+    // Recent blockers across the team — the lead's scan-this-first list.
+    const blockersIdx = standup.questions.length - 1;
+    const recentBlockers = (await deps.storage.listRecentResponses(standup.id, 40))
+      .filter(({ response }) => isBlocker(response.answers[blockersIdx] ?? ""))
+      .slice(0, 5)
+      .map(({ runDate, response }) => ({
+        runDate,
+        userId: response.userId,
+        blocker: (response.answers[blockersIdx] ?? "").split("\n")[0] ?? "",
+      }));
+    stats.push({ standup, respondedToday, runToday, streak, recentRuns, teamSize: participants.length, recentBlockers });
   }
   const since = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000).toISOString();
   const leaderboard = await deps.storage.kudosLeaderboard(since, 10);
