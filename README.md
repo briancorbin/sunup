@@ -9,6 +9,12 @@
   Your team's data lives in <i>your</i> infrastructure. No per-seat pricing, ever.
 </p>
 
+<p align="center">
+  <a href="https://github.com/briancorbin/sunup/actions/workflows/ci.yml"><img src="https://github.com/briancorbin/sunup/actions/workflows/ci.yml/badge.svg" alt="CI"/></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-f2a33c" alt="MIT license"/></a>
+  <img src="https://img.shields.io/badge/hosting-bring%20your%20own-4a4640" alt="self-hosted"/>
+</p>
+
 ---
 
 ## What it does
