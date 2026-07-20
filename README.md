@@ -54,8 +54,9 @@ Note the Worker URL printed at the end (e.g. `https://sunup.<you>.workers.dev`).
 
 1. Open [slack-app-manifest.yml](slack-app-manifest.yml) and replace `YOUR-WORKER-URL` with your Worker URL.
 2. Go to [api.slack.com/apps](https://api.slack.com/apps) → **Create New App** → **From a manifest** → paste it in.
-3. On the app page: **Install to Workspace**.
-4. Grab two values:
+3. Optional but nice: under *Basic Information → Display Information*, upload [assets/icon-1024.png](assets/icon-1024.png) as the app icon.
+4. On the app page: **Install to Workspace**.
+5. Grab two values:
    - **Bot User OAuth Token** (`xoxb-…`) from *OAuth & Permissions*
    - **Signing Secret** from *Basic Information*
 
