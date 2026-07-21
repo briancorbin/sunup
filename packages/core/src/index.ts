@@ -9,4 +9,5 @@ export * from "./blocks/digest";
 export * from "./blocks/home";
 export * from "./blocks/kudos";
 export * from "./blocks/retro";
+export * from "./blocks/config-modal";
 export * from "./export";

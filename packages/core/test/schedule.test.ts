@@ -7,6 +7,7 @@ import {
   isBlocker,
   lastScheduledDay,
   makeExportToken,
+  parseConfigSubmission,
   toCsv,
   verifyExportToken,
   type Participant,
@@ -154,6 +155,44 @@ describe("export", () => {
     ]);
     expect(csv).toContain('"said ""done"", shipped"');
     expect(csv).toContain("'=HYPERLINK(evil)");
+  });
+});
+
+describe("parseConfigSubmission", () => {
+  it("applies a full submission", () => {
+    const { standup: updated, errors } = parseConfigSubmission(standup, {
+      name: { answer: { value: "Morning Muster" } },
+      days: { answer: { selected_options: [{ value: "1" }, { value: "3" }, { value: "5" }] } },
+      prompt_time: { answer: { selected_time: "08:30" } },
+      digest_time: { answer: { selected_time: "12:00" } },
+      timezone: { answer: { value: "Europe/London" } },
+      tz_mode: { answer: { selected_option: { value: "fixed" } } },
+      reminder: { answer: { selected_option: { value: "30" } } },
+      mood: { answer: { selected_option: { value: "off" } } },
+      questions: { answer: { value: "What shipped?\nWhat's next?\nBlockers?" } },
+    });
+    expect(errors).toEqual({});
+    expect(updated).toMatchObject({
+      name: "Morning Muster",
+      scheduleDays: [1, 3, 5],
+      promptTime: "08:30",
+      digestTime: "12:00",
+      timezone: "Europe/London",
+      userTzPrompts: false,
+      reminderMinutes: 30,
+      includeMood: false,
+      questions: ["What shipped?", "What's next?", "Blockers?"],
+    });
+  });
+
+  it("reports field errors keyed by block_id", () => {
+    const { errors } = parseConfigSubmission(standup, {
+      name: { answer: { value: "  " } },
+      days: { answer: { selected_options: [] } },
+      timezone: { answer: { value: "Mars/Olympus_Mons" } },
+      questions: { answer: { value: "\n\n" } },
+    });
+    expect(Object.keys(errors).sort()).toEqual(["days", "name", "questions", "timezone"]);
   });
 });
 

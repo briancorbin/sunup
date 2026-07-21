@@ -96,7 +96,8 @@ Teammates run `/sunup join`. That's it. `/sunup help` shows everything else:
 | `/sunup setup [name]` | Create a check-in for the current channel |
 | `/sunup join` / `leave` | Manage your participation |
 | `/sunup status` | Show the channel's check-in config |
-| `/sunup config <field> <value>` | `prompt 08:30`, `digest 12:00`, `days mon,wed,fri`, `tz Europe/London`, `reminder 30`, `mood off`, `name Standup` |
+| `/sunup config` | Open the settings editor — a modal with timepickers, day checkboxes, and question editing |
+| `/sunup config <field> <value>` | Quick edits: `prompt 08:30`, `digest 12:00`, `days mon,wed,fri`, `tz Europe/London`, `reminder 30`, `mood off`, `name Standup` |
 | `/sunup questions Q1 \| Q2 \| Q3` | Set custom questions (the last is the blockers question) |
 | `/sunup snooze 5` / `snooze off` | Vacation mode — pause your prompts, skip "waiting on" |
 | `/sunup export` | CSV of the channel's full check-in history (15-min signed link) |

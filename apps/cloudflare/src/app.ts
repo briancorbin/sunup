@@ -1,8 +1,12 @@
 import { SlackApp, type SlackEdgeAppEnv } from "slack-edge";
 import {
   CHECKIN_MODAL_CALLBACK_ID,
+  CONFIG_MODAL_CALLBACK_ID,
   START_CHECKIN_ACTION_ID,
   HELP_TEXT,
+  buildConfigModal,
+  parseConfigSubmission,
+  type ConfigModalMetadata,
   type Deps,
   type CheckinModalMetadata,
   SlackClient,
@@ -101,6 +105,12 @@ export function buildApp(env: Env, origin: string): SlackApp<Env> {
         case "status":
           return respond(await handleStatus(deps, channelId));
         case "config": {
+          if (!argText) {
+            const standup = await deps.storage.getStandupByChannel(channelId);
+            if (!standup) return respond("No check-in in this channel yet — create one with `/sunup setup`.");
+            await deps.slack.openView(payload.trigger_id, buildConfigModal(standup));
+            return;
+          }
           const [field = "", ...valueParts] = argText.split(/\s+/);
           return respond(await handleConfig(deps, channelId, field.toLowerCase(), valueParts.join(" ")));
         }
@@ -162,6 +172,33 @@ export function buildApp(env: Env, origin: string): SlackApp<Env> {
     );
     await handleCheckinSubmission(deps, standup, response);
   });
+
+  app.view(
+    CONFIG_MODAL_CALLBACK_ID,
+    // ack: validate fast; field errors render inline in the modal
+    async ({ payload }) => {
+      const metadata = JSON.parse(payload.view.private_metadata) as ConfigModalMetadata;
+      const standup = await deps.storage.getStandup(metadata.standupId);
+      if (!standup) return;
+      const { errors } = parseConfigSubmission(standup, payload.view.state.values as never);
+      if (Object.keys(errors).length > 0) return { response_action: "errors" as const, errors };
+      return;
+    },
+    // lazy: persist and confirm
+    async ({ payload }) => {
+      const metadata = JSON.parse(payload.view.private_metadata) as ConfigModalMetadata;
+      const standup = await deps.storage.getStandup(metadata.standupId);
+      if (!standup) return;
+      const { standup: updated, errors } = parseConfigSubmission(standup, payload.view.state.values as never);
+      if (Object.keys(errors).length > 0) return;
+      await deps.storage.updateStandup(updated);
+      try {
+        await deps.slack.postEphemeral(updated.channelId, payload.user.id, `✅ *${updated.name}* settings saved.`);
+      } catch {
+        // Bot may not be in the channel yet; the modal closing is confirmation enough.
+      }
+    },
+  );
 
   app.event("app_home_opened", async ({ payload }) => {
     if (payload.tab !== "home") return;

@@ -16,7 +16,7 @@ export const HELP_TEXT = [
   "`/sunup setup [name]` — create a check-in for this channel",
   "`/sunup join` / `/sunup leave` — manage your participation",
   "`/sunup status` — show this channel's check-in config",
-  "`/sunup config <field> <value>` — fields: `prompt HH:MM`, `digest HH:MM`, `days mon,tue,...`, `tz <IANA>`, `reminder <minutes>`, `mood on|off`, `name <text>`",
+  "`/sunup config` — open the settings editor (or `/sunup config <field> <value>` for quick edits: `prompt HH:MM`, `digest HH:MM`, `days mon,tue,...`, `tz <IANA>`, `reminder <minutes>`, `mood on|off`, `name <text>`)",
   "`/sunup snooze <days>` / `/sunup snooze off` — pause your prompts (vacation mode)",
   "`/sunup export` — CSV of this channel's full check-in history (15-min link)",
   "`/sunup remove` — delete this channel's check-in (asks for confirmation)",
