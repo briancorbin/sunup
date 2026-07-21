@@ -1,5 +1,5 @@
-import type { CheckinResponse, Participant, Run, Standup } from "../types";
-import { isBlocker } from "../types";
+import type { Blocker, CheckinResponse, Participant, Run, Standup } from "../types";
+import { blockerAgeDays, isBlocker } from "../types";
 import { formatRunDate } from "../time";
 
 const MOOD_EMOJI: Record<number, string> = { 1: "😫", 2: "😕", 3: "😐", 4: "🙂", 5: "😄" };
@@ -20,6 +20,7 @@ export function buildDigest(
   responses: CheckinResponse[],
   participants: Participant[],
   streaks: Record<string, number> = {},
+  openBlockers?: Blocker[],
 ): { text: string; blocks: unknown[] } {
   const blocks: unknown[] = [
     { type: "header", text: { type: "plain_text", text: `☀️ ${standup.name} — ${formatRunDate(run.runDate)}` } },
@@ -47,17 +48,32 @@ export function buildDigest(
     });
   }
 
-  // Blockers get their own section so leads can scan for them.
-  const blockersIdx = standup.questions.length - 1;
-  const blocked = responses.filter((r) => isBlocker(r.answers[blockersIdx] ?? ""));
-  if (blocked.length > 0) {
+  // Blockers get their own section so leads can scan for them. With lifecycle
+  // tracking (openBlockers provided): every open blocker appears — aged, aging
+  // first, and flagged when the owner went silent today. Without: derive from
+  // today's answers as before.
+  let blockerLines: string[] = [];
+  if (openBlockers) {
+    blockerLines = openBlockers
+      .slice()
+      .sort((a, b) => a.openedDate.localeCompare(b.openedDate))
+      .map((b) => {
+        const age = blockerAgeDays(b, run.runDate);
+        const agePart = age > 1 ? ` _(blocked ${age} days)_` : "";
+        const silent = b.lastConfirmedDate < run.runDate ? " _(no update today)_" : "";
+        return `• <@${b.userId}>: ${b.text.split("\n")[0]}${agePart}${silent}`;
+      });
+  } else {
+    const blockersIdx = standup.questions.length - 1;
+    blockerLines = responses
+      .filter((r) => isBlocker(r.answers[blockersIdx] ?? ""))
+      .map((r) => `• <@${r.userId}>: ${(r.answers[blockersIdx] ?? "").split("\n")[0]}`);
+  }
+  if (blockerLines.length > 0) {
     blocks.push({ type: "divider" });
     blocks.push({
       type: "section",
-      text: {
-        type: "mrkdwn",
-        text: `🚧 *Blockers*\n${blocked.map((r) => `• <@${r.userId}>: ${(r.answers[blockersIdx] ?? "").split("\n")[0]}`).join("\n")}`.slice(0, 3000),
-      },
+      text: { type: "mrkdwn", text: `🚧 *Blockers*\n${blockerLines.join("\n")}`.slice(0, 3000) },
     });
   }
 

@@ -1,8 +1,11 @@
-import type { CheckinResponse, Run, Standup } from "../types";
+import type { Blocker, CheckinResponse, Run, Standup } from "../types";
+import { blockerAgeDays } from "../types";
 import { formatRunDate } from "../time";
 
 export const CHECKIN_MODAL_CALLBACK_ID = "sunup_checkin_modal";
 export const START_CHECKIN_ACTION_ID = "sunup_start_checkin";
+export const BLOCKER_RESOLVED_ACTION_ID = "sunup_blocker_resolved";
+export const BLOCKER_STILL_ACTION_ID = "sunup_blocker_still";
 
 export interface CheckinModalMetadata {
   standupId: number;
@@ -68,27 +71,67 @@ export function buildCheckinModal(standup: Standup, run: Run, existing: CheckinR
   };
 }
 
-/** DM prompt with the "Start check-in" button. */
-export function buildPromptMessage(standup: Standup, runId: number, isReminder: boolean): { text: string; blocks: unknown[] } {
+/**
+ * DM prompt with the "Start check-in" button. When the user has an open
+ * blocker from a previous day, a follow-up asks whether it's resolved.
+ */
+export function buildPromptMessage(
+  standup: Standup,
+  runId: number,
+  isReminder: boolean,
+  openBlocker?: Blocker,
+  todayDate?: string,
+): { text: string; blocks: unknown[] } {
   const text = isReminder
     ? `⏰ Friendly nudge — your *${standup.name}* check-in hasn't been submitted yet.`
     : `☀️ Good morning! Time for your *${standup.name}* check-in.`;
-  return {
-    text,
-    blocks: [
-      { type: "section", text: { type: "mrkdwn", text } },
+  const blocks: unknown[] = [
+    { type: "section", text: { type: "mrkdwn", text } },
+    {
+      type: "actions",
+      elements: [
+        {
+          type: "button",
+          style: "primary",
+          action_id: START_CHECKIN_ACTION_ID,
+          value: String(runId),
+          text: { type: "plain_text", text: "Start check-in" },
+        },
+      ],
+    },
+  ];
+
+  if (openBlocker) {
+    const age = todayDate ? blockerAgeDays(openBlocker, todayDate) : null;
+    blocks.push(
+      { type: "divider" },
+      {
+        type: "section",
+        text: {
+          type: "mrkdwn",
+          text: `🚧 You said this was blocking you${age && age > 2 ? ` (*${age} days* now)` : ""}:\n> ${openBlocker.text.split("\n")[0]}\nStill blocked?`,
+        },
+      },
       {
         type: "actions",
         elements: [
           {
             type: "button",
             style: "primary",
-            action_id: START_CHECKIN_ACTION_ID,
-            value: String(runId),
-            text: { type: "plain_text", text: "Start check-in" },
+            action_id: BLOCKER_RESOLVED_ACTION_ID,
+            value: String(openBlocker.id),
+            text: { type: "plain_text", text: "✅ Resolved" },
+          },
+          {
+            type: "button",
+            action_id: BLOCKER_STILL_ACTION_ID,
+            value: String(openBlocker.id),
+            text: { type: "plain_text", text: "😤 Still blocked" },
           },
         ],
       },
-    ],
-  };
+    );
+  }
+
+  return { text, blocks };
 }

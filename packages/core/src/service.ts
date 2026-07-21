@@ -1,6 +1,6 @@
 import { computeStreak, streaksForResponders, type Deps } from "./cron";
 import type { CheckinResponse, Standup } from "./types";
-import { DEFAULT_QUESTIONS, DEFAULT_STANDUP, isBlocker, isSnoozed } from "./types";
+import { DEFAULT_QUESTIONS, DEFAULT_STANDUP, blockerAgeDays, isBlocker, isSnoozed } from "./types";
 import { buildDigest } from "./blocks/digest";
 import { isValidTimezone, localParts, parseHM } from "./time";
 import { buildCheckinModal, type CheckinModalMetadata } from "./blocks/checkin-modal";
@@ -217,16 +217,29 @@ export function parseCheckinSubmission(
 
 export async function handleCheckinSubmission(deps: Deps, standup: Standup, response: CheckinResponse): Promise<void> {
   await deps.storage.upsertResponse(response);
+  const run = await deps.storage.getRunById(response.runId);
+
+  // Blocker lifecycle: a blocker answer opens/confirms; an all-clear resolves.
+  if (run) {
+    const blockerAnswer = (response.answers[standup.questions.length - 1] ?? "").trim();
+    const open = await deps.storage.getOpenBlocker(standup.id, response.userId);
+    if (isBlocker(blockerAnswer)) {
+      if (open) await deps.storage.confirmBlocker(open.id, run.runDate, blockerAnswer);
+      else await deps.storage.openBlocker(standup.id, response.userId, blockerAnswer, run.runDate);
+    } else if (open) {
+      await deps.storage.resolveBlocker(open.id, response.submittedAt);
+    }
+  }
 
   // Late check-in? Rebuild the already-posted digest in place.
-  const run = await deps.storage.getRunById(response.runId);
   let lateNote = "";
   if (run?.digestPostedAt && run.digestTs) {
     try {
       const responses = await deps.storage.listResponses(run.id);
       const participants = (await deps.storage.listParticipants(standup.id)).filter((p) => !isSnoozed(p, run.runDate));
       const streaks = await streaksForResponders(deps, standup, responses, run.runDate);
-      const digest = buildDigest(standup, run, responses, participants, streaks);
+      const openBlockers = await deps.storage.listOpenBlockers(standup.id);
+      const digest = buildDigest(standup, run, responses, participants, streaks, openBlockers);
       await deps.slack.updateMessage(standup.channelId, run.digestTs, digest.text, digest.blocks);
       lateNote = " Today's digest already went out — I've updated it to include you.";
     } catch (err) {
@@ -242,6 +255,22 @@ export async function handleCheckinSubmission(deps: Deps, standup: Standup, resp
     dm,
     `✅ Check-in recorded.${lateNote || ` The digest posts in <#${standup.channelId}> at ${standup.digestTime} ${standup.timezone}.`}${streakNote}`,
   );
+}
+
+/** Handle the Resolved / Still blocked buttons on the morning follow-up. Returns the reply text. */
+export async function handleBlockerAction(deps: Deps, blockerId: number, resolved: boolean, now: Date): Promise<string> {
+  const blocker = await deps.storage.getBlockerById(blockerId);
+  if (!blocker) return "Hm, I can't find that blocker anymore.";
+  if (blocker.resolvedAt) return "Already marked resolved — nice. ✅";
+  if (resolved) {
+    await deps.storage.resolveBlocker(blocker.id, now.toISOString());
+    const days = blockerAgeDays(blocker, now.toISOString().slice(0, 10));
+    return days > 1 ? `🎉 Resolved after ${days} days — great news!` : "🎉 Marked resolved — great news!";
+  }
+  const standup = await deps.storage.getStandup(blocker.standupId);
+  const date = standup ? localParts(now, standup.timezone).date : blocker.lastConfirmedDate;
+  await deps.storage.confirmBlocker(blocker.id, date);
+  return "😤 Noted — it stays on the board until it's resolved. Hang in there.";
 }
 
 /** `/sunup snooze <days|off>` — pause the invoker's prompts for this channel's standup. */
@@ -296,17 +325,22 @@ export async function publishHome(deps: Deps, userId: string, now: Date): Promis
       runDate: r.runDate,
       responseCount: r.responseCount,
     }));
-    // Recent blockers across the team — the lead's scan-this-first list.
-    const blockersIdx = standup.questions.length - 1;
-    const recentBlockers = (await deps.storage.listRecentResponses(standup.id, 40))
-      .filter(({ response }) => isBlocker(response.answers[blockersIdx] ?? ""))
-      .slice(0, 5)
-      .map(({ runDate, response }) => ({
-        runDate,
-        userId: response.userId,
-        blocker: (response.answers[blockersIdx] ?? "").split("\n")[0] ?? "",
-      }));
-    stats.push({ standup, respondedToday, runToday, streak, recentRuns, teamSize: participants.length, recentBlockers });
+    // Blocker board — open ones with age first, then recently resolved wins.
+    const blockers = [
+      ...(await deps.storage.listOpenBlockers(standup.id)).map((b) => ({
+        userId: b.userId,
+        text: b.text.split("\n")[0] ?? "",
+        status: "open" as const,
+        ageDays: blockerAgeDays(b, anchor.date),
+      })),
+      ...(await deps.storage.listResolvedBlockers(standup.id, 3)).map((b) => ({
+        userId: b.userId,
+        text: b.text.split("\n")[0] ?? "",
+        status: "resolved" as const,
+        ageDays: 0,
+      })),
+    ];
+    stats.push({ standup, respondedToday, runToday, streak, recentRuns, teamSize: participants.length, blockers });
   }
   const since = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000).toISOString();
   const leaderboard = await deps.storage.kudosLeaderboard(since, 10);

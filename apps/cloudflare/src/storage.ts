@@ -1,4 +1,5 @@
 import type {
+  Blocker,
   CheckinResponse,
   Kudos,
   LeaderboardEntry,
@@ -75,6 +76,28 @@ function rowToResponse(row: ResponseRow): CheckinResponse {
     answers: JSON.parse(row.answers) as string[],
     mood: row.mood,
     submittedAt: row.submitted_at,
+  };
+}
+
+interface BlockerRow {
+  id: number;
+  standup_id: number;
+  user_id: string;
+  text: string;
+  opened_date: string;
+  last_confirmed_date: string;
+  resolved_at: string | null;
+}
+
+function rowToBlocker(row: BlockerRow): Blocker {
+  return {
+    id: row.id,
+    standupId: row.standup_id,
+    userId: row.user_id,
+    text: row.text,
+    openedDate: row.opened_date,
+    lastConfirmedDate: row.last_confirmed_date,
+    resolvedAt: row.resolved_at,
   };
 }
 
@@ -298,6 +321,58 @@ export class D1Storage implements Storage {
       .bind(standupId, limit)
       .all<ResponseRow & { run_date: string }>();
     return results.map((r) => ({ runDate: r.run_date, response: rowToResponse(r) }));
+  }
+
+  async getOpenBlocker(standupId: number, userId: string): Promise<Blocker | null> {
+    const row = await this.db
+      .prepare("SELECT * FROM blockers WHERE standup_id = ? AND user_id = ? AND resolved_at IS NULL ORDER BY id DESC LIMIT 1")
+      .bind(standupId, userId)
+      .first<BlockerRow>();
+    return row ? rowToBlocker(row) : null;
+  }
+
+  async getBlockerById(id: number): Promise<Blocker | null> {
+    const row = await this.db.prepare("SELECT * FROM blockers WHERE id = ?").bind(id).first<BlockerRow>();
+    return row ? rowToBlocker(row) : null;
+  }
+
+  async openBlocker(standupId: number, userId: string, text: string, date: string): Promise<Blocker> {
+    const row = await this.db
+      .prepare(
+        "INSERT INTO blockers (standup_id, user_id, text, opened_date, last_confirmed_date) VALUES (?, ?, ?, ?, ?) RETURNING *",
+      )
+      .bind(standupId, userId, text, date, date)
+      .first<BlockerRow>();
+    if (!row) throw new Error("openBlocker: insert returned no row");
+    return rowToBlocker(row);
+  }
+
+  async confirmBlocker(id: number, date: string, text?: string): Promise<void> {
+    if (text !== undefined) {
+      await this.db.prepare("UPDATE blockers SET last_confirmed_date = ?, text = ? WHERE id = ?").bind(date, text, id).run();
+    } else {
+      await this.db.prepare("UPDATE blockers SET last_confirmed_date = ? WHERE id = ?").bind(date, id).run();
+    }
+  }
+
+  async resolveBlocker(id: number, at: string): Promise<void> {
+    await this.db.prepare("UPDATE blockers SET resolved_at = ? WHERE id = ? AND resolved_at IS NULL").bind(at, id).run();
+  }
+
+  async listOpenBlockers(standupId: number): Promise<Blocker[]> {
+    const { results } = await this.db
+      .prepare("SELECT * FROM blockers WHERE standup_id = ? AND resolved_at IS NULL ORDER BY opened_date")
+      .bind(standupId)
+      .all<BlockerRow>();
+    return results.map(rowToBlocker);
+  }
+
+  async listResolvedBlockers(standupId: number, limit: number): Promise<Blocker[]> {
+    const { results } = await this.db
+      .prepare("SELECT * FROM blockers WHERE standup_id = ? AND resolved_at IS NOT NULL ORDER BY resolved_at DESC LIMIT ?")
+      .bind(standupId, limit)
+      .all<BlockerRow>();
+    return results.map(rowToBlocker);
   }
 
   async addKudos(kudos: Kudos): Promise<void> {

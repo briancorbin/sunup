@@ -1,4 +1,5 @@
 import type {
+  Blocker,
   CheckinResponse,
   Kudos,
   LeaderboardEntry,
@@ -52,6 +53,17 @@ export interface Storage {
   listRecentRuns(standupId: number, limit: number): Promise<RunSummary[]>;
   /** Most-recent-first responses across recent runs, tagged with their run date. */
   listRecentResponses(standupId: number, limit: number): Promise<Array<{ runDate: string; response: CheckinResponse }>>;
+
+  // blockers (v1: at most one open blocker per standup+user)
+  getOpenBlocker(standupId: number, userId: string): Promise<Blocker | null>;
+  getBlockerById(id: number): Promise<Blocker | null>;
+  openBlocker(standupId: number, userId: string, text: string, date: string): Promise<Blocker>;
+  /** Refresh last-confirmed date (and optionally the text) on an open blocker. */
+  confirmBlocker(id: number, date: string, text?: string): Promise<void>;
+  resolveBlocker(id: number, at: string): Promise<void>;
+  listOpenBlockers(standupId: number): Promise<Blocker[]>;
+  /** Most recently resolved first. */
+  listResolvedBlockers(standupId: number, limit: number): Promise<Blocker[]>;
 
   // kudos
   addKudos(kudos: Kudos): Promise<void>;

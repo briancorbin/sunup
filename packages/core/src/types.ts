@@ -65,6 +65,28 @@ export interface CheckinResponse {
   submittedAt: string;
 }
 
+/** A tracked blocker with a lifecycle: opened → confirmed daily → resolved. */
+export interface Blocker {
+  id: number;
+  standupId: number;
+  userId: string;
+  /** Latest phrasing; openedDate keeps the true age even as text refreshes. */
+  text: string;
+  /** "YYYY-MM-DD" run date first reported. */
+  openedDate: string;
+  /** "YYYY-MM-DD" run date most recently reported or confirmed still blocked. */
+  lastConfirmedDate: string;
+  /** ISO timestamp; null = still open. */
+  resolvedAt: string | null;
+}
+
+/** Inclusive day count a blocker has been open as of `onDate` (opened today = 1). */
+export function blockerAgeDays(blocker: Blocker, onDate: string): number {
+  const opened = new Date(`${blocker.openedDate}T00:00:00Z`).getTime();
+  const now = new Date(`${onDate}T00:00:00Z`).getTime();
+  return Math.max(1, Math.round((now - opened) / 86_400_000) + 1);
+}
+
 export interface Kudos {
   fromUser: string;
   toUser: string;

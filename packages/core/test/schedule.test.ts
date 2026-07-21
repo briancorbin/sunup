@@ -3,6 +3,7 @@ import { computeDuePrompts } from "../src/cron";
 import { localParts, parseHM } from "../src/time";
 import {
   addDays,
+  blockerAgeDays,
   computeStreak,
   isBlocker,
   lastScheduledDay,
@@ -219,5 +220,26 @@ describe("buildDigest", () => {
   it("handles an empty day", () => {
     const digest = buildDigest(standup, run, [], participants);
     expect(JSON.stringify(digest.blocks)).toContain("No check-ins");
+  });
+
+  it("renders tracked blockers with age, oldest first, flagging silent owners", () => {
+    const digest = buildDigest(standup, run, [], participants, {}, [
+      { id: 1, standupId: 1, userId: "U_NYC", text: "waiting on infra", openedDate: "2026-07-18", lastConfirmedDate: "2026-07-20", resolvedAt: null },
+      { id: 2, standupId: 1, userId: "U_LON", text: "app review stuck", openedDate: "2026-07-16", lastConfirmedDate: "2026-07-17", resolvedAt: null },
+    ]);
+    const json = JSON.stringify(digest.blocks);
+    expect(json).toContain("blocked 3 days"); // U_NYC: 18th → 20th
+    expect(json).toContain("blocked 5 days"); // U_LON: 16th → 20th
+    expect(json).toContain("no update today"); // U_LON went silent
+    // Oldest blocker sorts first.
+    expect(json.indexOf("app review stuck")).toBeLessThan(json.indexOf("waiting on infra"));
+  });
+});
+
+describe("blockerAgeDays", () => {
+  it("counts inclusively from opened date", () => {
+    const b = { id: 1, standupId: 1, userId: "U", text: "x", openedDate: "2026-07-18", lastConfirmedDate: "2026-07-18", resolvedAt: null };
+    expect(blockerAgeDays(b, "2026-07-18")).toBe(1);
+    expect(blockerAgeDays(b, "2026-07-21")).toBe(4);
   });
 });

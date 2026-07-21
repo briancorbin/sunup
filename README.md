@@ -21,7 +21,7 @@
 
 - **☀️ Async check-ins** — at a time you choose, sunup DMs each participant a prompt. They answer a short form (configurable questions) whenever suits them — each person is prompted at the chosen hour *in their own timezone*.
 - **📰 Channel digest** — at digest time, one tidy message summarizes everyone's answers in the team channel.
-- **🚧 Blocker surfacing** — blockers get their own highlighted section in the digest, so leads can scan for them.
+- **🚧 Blocker tracking** — blockers aren't a one-day mention; they're tracked until resolved. The next morning's prompt asks "still blocked?" with one-tap Resolved / Still blocked buttons, the digest shows every open blocker with its age ("blocked 3 days") — including ones whose owner went silent — and the App Home has a live blocker board.
 - **⏰ Nudges** — non-responders get one friendly reminder before the digest posts. Check in late anyway? The posted digest updates in place to include you.
 - **😴 Vacation mode** — `/sunup snooze 5` pauses prompts and keeps you out of "waiting on" lists.
 - **🎉 Kudos** — `/kudos @teammate for shipping the thing` posts a celebration and feeds a 30-day leaderboard.

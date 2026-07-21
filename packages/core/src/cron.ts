@@ -106,6 +106,9 @@ async function tickStandup(deps: Deps, standup: Standup, now: Date): Promise<voi
   const responses = await deps.storage.listResponses(run.id);
   const responded = new Set(responses.map((r) => r.userId));
   const state = new Map(runParticipants.map((rp) => [rp.userId, rp]));
+  const openBlockers = await deps.storage.listOpenBlockers(standup.id);
+  // Follow up on blockers carried over from a previous day, not today's.
+  const carriedBlockerByUser = new Map(openBlockers.filter((b) => b.openedDate < anchor.date).map((b) => [b.userId, b]));
 
   // A failed DM (deactivated user, demo data, revoked scope) must not abort the
   // standup's tick — and we mark the user handled either way: prompt-once
@@ -113,7 +116,13 @@ async function tickStandup(deps: Deps, standup: Standup, now: Date): Promise<voi
   const sendDm = async (userId: string, isReminder: boolean): Promise<void> => {
     try {
       const dm = await deps.slack.openDm(userId);
-      const msg = buildPromptMessage(standup, run.id, isReminder);
+      const msg = buildPromptMessage(
+        standup,
+        run.id,
+        isReminder,
+        isReminder ? undefined : carriedBlockerByUser.get(userId),
+        anchor.date,
+      );
       await deps.slack.postMessage(dm, msg.text, msg.blocks);
     } catch (err) {
       console.error(`sunup cron: ${isReminder ? "reminder" : "prompt"} DM to ${userId} failed`, err);
@@ -143,7 +152,7 @@ async function tickStandup(deps: Deps, standup: Standup, now: Date): Promise<voi
     if (!run.digestPostedAt) {
       const active = participants.filter((p) => !isSnoozed(p, anchor.date));
       const streaks = await streaksForResponders(deps, standup, responses, anchor.date);
-      const digest = buildDigest(standup, run, responses, active, streaks);
+      const digest = buildDigest(standup, run, responses, active, streaks, openBlockers);
       const posted = await deps.slack.postMessage(standup.channelId, digest.text, digest.blocks);
       await deps.storage.markDigestPosted(run.id, nowIso, posted.ts ?? null);
       digestJustPosted = true;

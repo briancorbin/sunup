@@ -1,8 +1,11 @@
 import { SlackApp, type SlackEdgeAppEnv } from "slack-edge";
 import {
+  BLOCKER_RESOLVED_ACTION_ID,
+  BLOCKER_STILL_ACTION_ID,
   CHECKIN_MODAL_CALLBACK_ID,
   CONFIG_MODAL_CALLBACK_ID,
   START_CHECKIN_ACTION_ID,
+  handleBlockerAction,
   HELP_TEXT,
   buildConfigModal,
   parseConfigSubmission,
@@ -158,6 +161,24 @@ export function buildApp(env: Env, origin: string): SlackApp<Env> {
       await openCheckinModalForRun(deps, payload.trigger_id, runId, payload.user.id);
     },
   );
+
+  for (const [actionId, resolved] of [
+    [BLOCKER_RESOLVED_ACTION_ID, true],
+    [BLOCKER_STILL_ACTION_ID, false],
+  ] as const) {
+    app.action(
+      actionId,
+      async () => {},
+      async ({ context, payload }) => {
+        const action = payload.actions[0];
+        const blockerId = Number(action && "value" in action ? action.value : NaN);
+        if (!Number.isFinite(blockerId)) return;
+        const reply = await handleBlockerAction(deps, blockerId, resolved, new Date());
+        // New message in the DM — replacing the original would kill the check-in button.
+        await context.respond?.({ text: reply, replace_original: false });
+      },
+    );
+  }
 
   app.view(CHECKIN_MODAL_CALLBACK_ID, async ({ payload }) => {
     const metadata = JSON.parse(payload.view.private_metadata) as CheckinModalMetadata;
