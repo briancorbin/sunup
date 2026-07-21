@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "@sunup/core": "*",
+    "@sunup/slack-app": "*",
     "slack-edge": "^1.0.0"
   },
   "devDependencies": {

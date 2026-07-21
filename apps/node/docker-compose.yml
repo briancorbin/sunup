@@ -1,0 +1,20 @@
+# docker compose -f apps/node/docker-compose.yml up -d   (from the repo root)
+services:
+  sunup:
+    build:
+      context: ../..
+      dockerfile: apps/node/Dockerfile
+    ports:
+      - "8787:8787"
+    environment:
+      SLACK_BOT_TOKEN: ${SLACK_BOT_TOKEN}
+      SLACK_SIGNING_SECRET: ${SLACK_SIGNING_SECRET}
+      BASE_URL: ${BASE_URL:-http://localhost:8787}
+      DB_PATH: /data/sunup.db
+      # RETENTION_DAYS: "90"
+    volumes:
+      - sunup-data:/data
+    restart: unless-stopped
+
+volumes:
+  sunup-data:

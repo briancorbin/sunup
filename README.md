@@ -6,7 +6,8 @@
 
 <p align="center">
   Async daily check-ins, digests, and kudos for Slack — <b>open source, self-hosted, free</b>.<br/>
-  Your team's data lives in <i>your</i> infrastructure. No per-seat pricing, ever.
+  Your team's data lives in <i>your</i> infrastructure. No per-seat pricing, ever.<br/>
+  Runs on <b>Cloudflare Workers</b> (free tier) or <b>plain Node</b> — your call.
 </p>
 
 <p align="center">
@@ -117,22 +118,43 @@ sunup is deliberately split so the bot logic is portable and the platform is a p
 ```
 packages/core        the entire bot — scheduling, check-in flow, digests,
                      kudos, Block Kit UI. Pure TypeScript + Web APIs (fetch,
-                     Intl). Zero platform imports. Talks to persistence only
-                     through the Storage interface (src/ports.ts).
+                     Intl, WebCrypto). Zero platform imports. Talks to
+                     persistence only through the Storage interface
+                     (src/ports.ts).
 
-apps/cloudflare      the Cloudflare adapter — a Worker (HTTP entry via
-                     slack-edge), a D1 implementation of Storage, and a cron
-                     trigger that calls core's runCron() every 10 minutes.
+packages/slack-app   the Slack-facing application (slash command router,
+                     modals, actions, App Home) on slack-edge — shared
+                     verbatim by every adapter.
+
+apps/cloudflare      Workers adapter: HTTP entry, D1 Storage, cron trigger.
+apps/node            Node adapter: plain Node server (node:sqlite storage —
+                     zero native deps), setInterval trigger, Dockerfile.
+
+migrations/          one migration set, applied by wrangler (D1) and the
+                     Node adapter's built-in runner alike.
 ```
 
 The scheduler tick (`runCron`) is **idempotent** — every send is guarded by a persisted marker — so it's safe on any at-least-once trigger.
 
+### Deploying on Node instead of Cloudflare
+
+No Cloudflare account? Run the same bot as a plain Node (>= 24) process:
+
+```sh
+cd apps/node
+SLACK_BOT_TOKEN=xoxb-… SLACK_SIGNING_SECRET=… BASE_URL=https://your-public-url npm start
+```
+
+Migrations apply automatically on boot to `DB_PATH` (default `./sunup.db`). Point your Slack app's request URLs at the public URL (a reverse proxy or `cloudflared tunnel --url http://localhost:8787` for testing). Env vars: `PORT`, `DB_PATH`, `BASE_URL`, `CRON_INTERVAL_MINUTES`, `RETENTION_DAYS`.
+
+Or containerized: `docker compose -f apps/node/docker-compose.yml up -d` (see [apps/node/docker-compose.yml](apps/node/docker-compose.yml)).
+
 ### Porting to another ecosystem
 
-Want sunup on AWS, Fly, a VPS, or bare Node? Add an `apps/<platform>` that provides three things:
+Want sunup on AWS Lambda, Deno, or Bun? An adapter provides three things (see `apps/node` — it's ~150 lines plus a Storage impl):
 
-1. **An HTTP entry** that hands Slack requests to [slack-edge](https://github.com/seratch/slack-edge) (runs on anything Web-standard) or any equivalent that verifies signatures and routes events
-2. **A `Storage` implementation** (`packages/core/src/ports.ts` — ~25 straightforward methods; the D1 one in `apps/cloudflare/src/storage.ts` is the reference)
+1. **An HTTP entry** that hands Slack requests to the shared `@sunup/slack-app` (built on [slack-edge](https://github.com/seratch/slack-edge), runs on anything Web-standard)
+2. **A `Storage` implementation** (`packages/core/src/ports.ts`; the D1 and node:sqlite versions are references)
 3. **A trigger** that calls `runCron(deps, new Date())` every 5–15 minutes
 
 Core never imports platform code — PRs adding adapters are very welcome.

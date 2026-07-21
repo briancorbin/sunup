@@ -1,13 +1,21 @@
 import { runCron } from "@sunup/core";
-import { buildApp, buildDeps, handleExportRequest, type Env } from "./app";
+import { createSlackApp, handleExportRequest } from "@sunup/slack-app";
+import { buildDeps, type Env } from "./app";
 
 export default {
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     const url = new URL(request.url);
+    const deps = buildDeps(env);
     if (request.method === "GET" && url.pathname === "/export") {
-      return await handleExportRequest(env, url);
+      return await handleExportRequest(deps.storage, env.SLACK_SIGNING_SECRET, url);
     }
-    return await buildApp(env, url.origin).run(request, ctx);
+    const app = createSlackApp({
+      deps,
+      signingSecret: env.SLACK_SIGNING_SECRET,
+      botToken: env.SLACK_BOT_TOKEN,
+      origin: url.origin,
+    });
+    return await app.run(request, ctx);
   },
 
   async scheduled(controller: ScheduledController, env: Env, ctx: ExecutionContext): Promise<void> {
