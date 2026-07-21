@@ -20,6 +20,7 @@ const standup: Standup = {
   id: 1,
   name: "Daily Check-in",
   channelId: "C123",
+  kind: "sunup",
   questions: ["Yesterday?", "Today?", "Blockers?"],
   scheduleDays: [1, 2, 3, 4, 5],
   promptTime: "09:00",
@@ -233,6 +234,31 @@ describe("buildDigest", () => {
     expect(json).toContain("no update today"); // U_LON went silent
     // Oldest blocker sorts first.
     expect(json.indexOf("app review stuck")).toBeLessThan(json.indexOf("waiting on infra"));
+  });
+});
+
+describe("sundown kind behavior", () => {
+  const sundown: Standup = {
+    ...standup,
+    kind: "sundown",
+    name: "Daily Checkout",
+    questions: ["What shipped today?", "What's carrying over?", "Any wins?"],
+  };
+  const run = { id: 11, standupId: 1, runDate: "2026-07-20", digestPostedAt: null, digestTs: null };
+
+  it("digest uses sunset tone and skips waiting-on, streaks, and blockers", () => {
+    const digest = buildDigest(
+      sundown,
+      run,
+      [{ runId: 11, userId: "U_NYC", answers: ["shipped the thing", "carryover", "won a bet"], mood: null, submittedAt: "" }],
+      participants,
+      { U_NYC: 5 }, // would be a milestone on a sunup digest
+    );
+    const json = JSON.stringify(digest.blocks);
+    expect(json).toContain("🌇");
+    expect(json).not.toContain("Waiting on:");
+    expect(json).not.toContain("streak");
+    expect(json).not.toContain("🚧"); // no blockers section, even though the last answer is non-empty
   });
 });
 

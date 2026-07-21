@@ -1,5 +1,5 @@
 import type { Blocker, CheckinResponse, Participant, Run, Standup } from "../types";
-import { blockerAgeDays, isBlocker } from "../types";
+import { blockerAgeDays, isBlocker, kindBehavior } from "../types";
 import { formatRunDate } from "../time";
 
 const MOOD_EMOJI: Record<number, string> = { 1: "😫", 2: "😕", 3: "😐", 4: "🙂", 5: "😄" };
@@ -22,8 +22,9 @@ export function buildDigest(
   streaks: Record<string, number> = {},
   openBlockers?: Blocker[],
 ): { text: string; blocks: unknown[] } {
+  const behavior = kindBehavior(standup);
   const blocks: unknown[] = [
-    { type: "header", text: { type: "plain_text", text: `☀️ ${standup.name} — ${formatRunDate(run.runDate)}` } },
+    { type: "header", text: { type: "plain_text", text: `${behavior.emoji} ${standup.name} — ${formatRunDate(run.runDate)}` } },
   ];
 
   if (responses.length === 0) {
@@ -40,7 +41,7 @@ export function buildDigest(
       .filter(Boolean)
       .join("\n");
     const streak = streaks[response.userId] ?? 0;
-    const flame = STREAK_MILESTONES.has(streak) ? `   🔥 *${streak}-day streak!*` : "";
+    const flame = behavior.celebrateStreaks && STREAK_MILESTONES.has(streak) ? `   🔥 *${streak}-day streak!*` : "";
     blocks.push({ type: "divider" });
     blocks.push({
       type: "section",
@@ -53,7 +54,9 @@ export function buildDigest(
   // first, and flagged when the owner went silent today. Without: derive from
   // today's answers as before.
   let blockerLines: string[] = [];
-  if (openBlockers) {
+  if (!behavior.trackBlockers) {
+    blockerLines = [];
+  } else if (openBlockers) {
     blockerLines = openBlockers
       .slice()
       .sort((a, b) => a.openedDate.localeCompare(b.openedDate))
@@ -80,7 +83,7 @@ export function buildDigest(
   const contextLines: string[] = [];
   const responded = new Set(responses.map((r) => r.userId));
   const missing = participants.filter((p) => !responded.has(p.userId));
-  if (missing.length > 0 && responses.length > 0) {
+  if (behavior.showWaitingOn && missing.length > 0 && responses.length > 0) {
     contextLines.push(`Waiting on: ${missing.map((p) => `<@${p.userId}>`).join(", ")}`);
   }
   const moods = responses.map((r) => r.mood).filter((m): m is number => m != null);

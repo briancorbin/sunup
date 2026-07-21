@@ -8,6 +8,7 @@ import type {
   RunParticipant,
   RunSummary,
   Standup,
+  StandupKind,
 } from "./types";
 
 /**
@@ -19,7 +20,7 @@ export interface Storage {
   // standups
   listStandups(): Promise<Standup[]>;
   getStandup(id: number): Promise<Standup | null>;
-  getStandupByChannel(channelId: string): Promise<Standup | null>;
+  getStandupByChannel(channelId: string, kind: StandupKind): Promise<Standup | null>;
   createStandup(input: Omit<Standup, "id" | "lastRetroDate">): Promise<Standup>;
   updateStandup(standup: Standup): Promise<void>;
   deleteStandup(id: number): Promise<void>;

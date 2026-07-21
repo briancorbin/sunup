@@ -19,6 +19,11 @@ features:
       description: Submit your check-in, or manage this channel's check-in
       usage_hint: "[setup | join | leave | status | config | questions | help]"
       should_escape: false
+    - command: /sundown
+      url: https://YOUR-WORKER-URL/
+      description: Evening checkout — what shipped, what carries over, wins
+      usage_hint: "[setup | join | leave | status | config | questions | help]"
+      should_escape: false
     - command: /kudos
       url: https://YOUR-WORKER-URL/
       description: Give a teammate kudos

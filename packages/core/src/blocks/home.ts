@@ -34,7 +34,7 @@ export function buildHomeView(userId: string, stats: HomeStandupStats[], leaderb
       ? "No check-in scheduled today"
       : s.respondedToday
         ? "✅ You've checked in today"
-        : "⏳ Not checked in yet — `/sunup` to start";
+        : `⏳ Not checked in yet — \`/${s.standup.kind}\` to start`;
     const participation = s.recentRuns
       .slice()
       .reverse()

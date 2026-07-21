@@ -73,72 +73,75 @@ export function buildApp(env: Env, origin: string): SlackApp<Env> {
   const app = new SlackApp({ env });
   const deps = buildDeps(env);
 
-  app.command(
-    "/sunup",
-    async () => "", // ack within 3s; real work happens in the lazy handler
-    async ({ context, payload }) => {
-      const [sub = "", ...rest] = payload.text.trim().split(/\s+/);
-      const argText = payload.text.trim().slice(sub.length).trim();
-      const channelId = payload.channel_id;
-      const userId = payload.user_id;
+  // /sunup and /sundown share one router; only the kind differs.
+  for (const kind of ["sunup", "sundown"] as const) {
+    app.command(
+      `/${kind}`,
+      async () => "", // ack within 3s; real work happens in the lazy handler
+      async ({ context, payload }) => {
+        const [sub = ""] = payload.text.trim().split(/\s+/);
+        const argText = payload.text.trim().slice(sub.length).trim();
+        const channelId = payload.channel_id;
+        const userId = payload.user_id;
 
-      const respond = async (text: string) => {
-        await context.respond({ text, response_type: "ephemeral" });
-      };
+        const respond = async (text: string) => {
+          await context.respond({ text, response_type: "ephemeral" });
+        };
 
-      switch (sub.toLowerCase()) {
-        case "":
-        case "checkin": {
-          const standup = await resolveStandupForCheckin(deps, channelId, userId);
-          if (!standup) {
-            await respond(
-              "I couldn't tell which check-in you mean — run `/sunup` in the check-in channel, or `/sunup setup` to create one here.",
+        switch (sub.toLowerCase()) {
+          case "":
+          case "checkin": {
+            const standup = await resolveStandupForCheckin(deps, channelId, userId, kind);
+            if (!standup) {
+              await respond(
+                `I couldn't tell which check-in you mean — run \`/${kind}\` in its channel, or \`/${kind} setup\` to create one here.`,
+              );
+              return;
+            }
+            await openCheckinModal(deps, payload.trigger_id, standup, new Date(), userId);
+            return;
+          }
+          case "setup":
+            return respond(await handleSetup(deps, channelId, userId, argText || undefined, kind));
+          case "join":
+            return respond(await handleJoin(deps, channelId, userId, kind));
+          case "leave":
+            return respond(await handleLeave(deps, channelId, userId, kind));
+          case "status":
+            return respond(await handleStatus(deps, channelId, kind));
+          case "config": {
+            if (!argText) {
+              const standup = await deps.storage.getStandupByChannel(channelId, kind);
+              if (!standup) return respond(`No ${kind} check-in in this channel yet — create one with \`/${kind} setup\`.`);
+              await deps.slack.openView(payload.trigger_id, buildConfigModal(standup));
+              return;
+            }
+            const [field = "", ...valueParts] = argText.split(/\s+/);
+            return respond(await handleConfig(deps, channelId, field.toLowerCase(), valueParts.join(" "), kind));
+          }
+          case "questions":
+            return respond(await handleQuestions(deps, channelId, argText, kind));
+          case "export": {
+            const standup = await deps.storage.getStandupByChannel(channelId, kind);
+            if (!standup) return respond(`No ${kind} check-in in this channel yet — create one with \`/${kind} setup\`.`);
+            const expires = Math.floor(Date.now() / 1000) + 15 * 60;
+            const token = await makeExportToken(env.SLACK_SIGNING_SECRET, standup.id, expires);
+            return respond(
+              `📄 CSV export of *${standup.name}* — link valid for 15 minutes:\n${origin}/export?token=${token}`,
             );
-            return;
           }
-          await openCheckinModal(deps, payload.trigger_id, standup, new Date(), userId);
-          return;
+          case "snooze":
+            return respond(await handleSnooze(deps, channelId, userId, argText.toLowerCase(), new Date(), kind));
+          case "remove":
+          case "delete":
+            return respond(await handleRemove(deps, channelId, argText.toLowerCase() === "confirm", kind));
+          case "help":
+          default:
+            return respond(HELP_TEXT);
         }
-        case "setup":
-          return respond(await handleSetup(deps, channelId, userId, argText || undefined));
-        case "join":
-          return respond(await handleJoin(deps, channelId, userId));
-        case "leave":
-          return respond(await handleLeave(deps, channelId, userId));
-        case "status":
-          return respond(await handleStatus(deps, channelId));
-        case "config": {
-          if (!argText) {
-            const standup = await deps.storage.getStandupByChannel(channelId);
-            if (!standup) return respond("No check-in in this channel yet — create one with `/sunup setup`.");
-            await deps.slack.openView(payload.trigger_id, buildConfigModal(standup));
-            return;
-          }
-          const [field = "", ...valueParts] = argText.split(/\s+/);
-          return respond(await handleConfig(deps, channelId, field.toLowerCase(), valueParts.join(" ")));
-        }
-        case "questions":
-          return respond(await handleQuestions(deps, channelId, argText));
-        case "export": {
-          const standup = await deps.storage.getStandupByChannel(channelId);
-          if (!standup) return respond("No check-in in this channel yet — create one with `/sunup setup`.");
-          const expires = Math.floor(Date.now() / 1000) + 15 * 60;
-          const token = await makeExportToken(env.SLACK_SIGNING_SECRET, standup.id, expires);
-          return respond(
-            `📄 CSV export of *${standup.name}* — link valid for 15 minutes:\n${origin}/export?token=${token}`,
-          );
-        }
-        case "snooze":
-          return respond(await handleSnooze(deps, channelId, userId, argText.toLowerCase(), new Date()));
-        case "remove":
-        case "delete":
-          return respond(await handleRemove(deps, channelId, argText.toLowerCase() === "confirm"));
-        case "help":
-        default:
-          return respond(HELP_TEXT);
-      }
-    },
-  );
+      },
+    );
+  }
 
   app.command(
     "/kudos",

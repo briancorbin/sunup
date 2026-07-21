@@ -8,6 +8,7 @@ import type {
   RunParticipant,
   RunSummary,
   Standup,
+  StandupKind,
   Storage,
 } from "@sunup/core";
 
@@ -15,6 +16,7 @@ interface StandupRow {
   id: number;
   name: string;
   channel_id: string;
+  kind: string;
   questions: string;
   schedule_days: string;
   prompt_time: string;
@@ -31,6 +33,7 @@ function rowToStandup(row: StandupRow): Standup {
     id: row.id,
     name: row.name,
     channelId: row.channel_id,
+    kind: (row.kind === "sundown" ? "sundown" : "sunup") as Standup["kind"],
     questions: JSON.parse(row.questions) as string[],
     scheduleDays: JSON.parse(row.schedule_days) as number[],
     promptTime: row.prompt_time,
@@ -114,20 +117,24 @@ export class D1Storage implements Storage {
     return row ? rowToStandup(row) : null;
   }
 
-  async getStandupByChannel(channelId: string): Promise<Standup | null> {
-    const row = await this.db.prepare("SELECT * FROM standups WHERE channel_id = ?").bind(channelId).first<StandupRow>();
+  async getStandupByChannel(channelId: string, kind: StandupKind): Promise<Standup | null> {
+    const row = await this.db
+      .prepare("SELECT * FROM standups WHERE channel_id = ? AND kind = ?")
+      .bind(channelId, kind)
+      .first<StandupRow>();
     return row ? rowToStandup(row) : null;
   }
 
   async createStandup(input: Omit<Standup, "id" | "lastRetroDate">): Promise<Standup> {
     const row = await this.db
       .prepare(
-        `INSERT INTO standups (name, channel_id, questions, schedule_days, prompt_time, digest_time, timezone, user_tz_prompts, reminder_minutes, include_mood)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING *`,
+        `INSERT INTO standups (name, channel_id, kind, questions, schedule_days, prompt_time, digest_time, timezone, user_tz_prompts, reminder_minutes, include_mood)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING *`,
       )
       .bind(
         input.name,
         input.channelId,
+        input.kind,
         JSON.stringify(input.questions),
         JSON.stringify(input.scheduleDays),
         input.promptTime,

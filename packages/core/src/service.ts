@@ -1,6 +1,6 @@
 import { computeStreak, streaksForResponders, type Deps } from "./cron";
-import type { CheckinResponse, Standup } from "./types";
-import { DEFAULT_QUESTIONS, DEFAULT_STANDUP, blockerAgeDays, isBlocker, isSnoozed } from "./types";
+import type { CheckinResponse, Standup, StandupKind } from "./types";
+import { DEFAULT_STANDUP, blockerAgeDays, isBlocker, isSnoozed, kindBehavior, KIND_BEHAVIOR } from "./types";
 import { buildDigest } from "./blocks/digest";
 import { isValidTimezone, localParts, parseHM } from "./time";
 import { buildCheckinModal, type CheckinModalMetadata } from "./blocks/checkin-modal";
@@ -19,59 +19,62 @@ export const HELP_TEXT = [
   "`/sunup config` — open the settings editor (or `/sunup config <field> <value>` for quick edits: `prompt HH:MM`, `digest HH:MM`, `days mon,tue,...`, `tz <IANA>`, `reminder <minutes>`, `mood on|off`, `name <text>`)",
   "`/sunup snooze <days>` / `/sunup snooze off` — pause your prompts (vacation mode)",
   "`/sunup export` — CSV of this channel's full check-in history (15-min link)",
+  "`/sundown …` — the evening checkout: same subcommands, sunset edition (what shipped, what carries over, wins)",
   "`/sunup remove` — delete this channel's check-in (asks for confirmation)",
   "`/sunup questions Q1 | Q2 | Q3` — set questions (last one is the blockers question)",
   "`/kudos @user <message>` — celebrate a teammate",
 ].join("\n");
 
-/** `/sunup setup [name]` — create a standup for the channel and enroll the invoker. */
-export async function handleSetup(deps: Deps, channelId: string, userId: string, name: string | undefined): Promise<string> {
-  const existing = await deps.storage.getStandupByChannel(channelId);
+/** `/<kind> setup [name]` — create a check-in of that kind for the channel and enroll the invoker. */
+export async function handleSetup(deps: Deps, channelId: string, userId: string, name: string | undefined, kind: StandupKind): Promise<string> {
+  const behavior = KIND_BEHAVIOR[kind];
+  const existing = await deps.storage.getStandupByChannel(channelId, kind);
   if (existing) {
-    return `This channel already has a check-in (*${existing.name}*). Use \`/sunup join\` or \`/sunup config\`.`;
+    return `This channel already has a ${kind} check-in (*${existing.name}*). Use \`/${kind} join\` or \`/${kind} config\`.`;
   }
   const tz = (await deps.slack.userTz(userId)) ?? "America/New_York";
   const standup = await deps.storage.createStandup({
-    name: name?.trim() || "Daily Check-in",
+    name: name?.trim() || behavior.defaultName,
     channelId,
-    questions: [...DEFAULT_QUESTIONS],
+    kind,
+    questions: [...behavior.defaultQuestions],
     scheduleDays: [...DEFAULT_STANDUP.scheduleDays],
-    promptTime: DEFAULT_STANDUP.promptTime,
-    digestTime: DEFAULT_STANDUP.digestTime,
+    promptTime: behavior.defaultPromptTime,
+    digestTime: behavior.defaultDigestTime,
     timezone: tz,
     userTzPrompts: DEFAULT_STANDUP.userTzPrompts,
     reminderMinutes: DEFAULT_STANDUP.reminderMinutes,
-    includeMood: DEFAULT_STANDUP.includeMood,
+    includeMood: behavior.defaultIncludeMood,
   });
   await deps.storage.addParticipant(standup.id, userId, tz);
   return [
-    `☀️ *${standup.name}* is set up for this channel!`,
+    `${behavior.emoji} *${standup.name}* is set up for this channel!`,
     `Prompts weekdays at *${standup.promptTime}* (each person's local time), digest here at *${standup.digestTime}* ${tz}.`,
     "",
-    "• Teammates join with `/sunup join`",
-    "• Tune it with `/sunup config` and `/sunup questions` (see `/sunup help`)",
+    `• Teammates join with \`/${kind} join\``,
+    `• Tune it with \`/${kind} config\` and \`/${kind} questions\` (see \`/${kind} help\`)`,
     "• *Invite me to this channel* (`/invite @Sunup`) so I can post the digest",
   ].join("\n");
 }
 
-export async function handleJoin(deps: Deps, channelId: string, userId: string): Promise<string> {
-  const standup = await deps.storage.getStandupByChannel(channelId);
-  if (!standup) return "No check-in in this channel yet — create one with `/sunup setup`.";
+export async function handleJoin(deps: Deps, channelId: string, userId: string, kind: StandupKind): Promise<string> {
+  const standup = await deps.storage.getStandupByChannel(channelId, kind);
+  if (!standup) return `No ${kind} check-in in this channel yet — create one with \`/${kind} setup\`.`;
   const tz = await deps.slack.userTz(userId);
   await deps.storage.addParticipant(standup.id, userId, tz);
   return `You're in! You'll be prompted for *${standup.name}* at ${standup.promptTime}${standup.userTzPrompts ? " your time" : ` ${standup.timezone}`}.`;
 }
 
-export async function handleLeave(deps: Deps, channelId: string, userId: string): Promise<string> {
-  const standup = await deps.storage.getStandupByChannel(channelId);
-  if (!standup) return "No check-in in this channel.";
+export async function handleLeave(deps: Deps, channelId: string, userId: string, kind: StandupKind): Promise<string> {
+  const standup = await deps.storage.getStandupByChannel(channelId, kind);
+  if (!standup) return `No ${kind} check-in in this channel.`;
   await deps.storage.removeParticipant(standup.id, userId);
-  return `You've left *${standup.name}*. Come back any time with \`/sunup join\`.`;
+  return `You've left *${standup.name}*. Come back any time with \`/${kind} join\`.`;
 }
 
-export async function handleStatus(deps: Deps, channelId: string): Promise<string> {
-  const standup = await deps.storage.getStandupByChannel(channelId);
-  if (!standup) return "No check-in in this channel yet — create one with `/sunup setup`.";
+export async function handleStatus(deps: Deps, channelId: string, kind: StandupKind): Promise<string> {
+  const standup = await deps.storage.getStandupByChannel(channelId, kind);
+  if (!standup) return `No ${kind} check-in in this channel yet — create one with \`/${kind} setup\`.`;
   const participants = await deps.storage.listParticipants(standup.id);
   return [
     `*${standup.name}*`,
@@ -85,26 +88,26 @@ export async function handleStatus(deps: Deps, channelId: string): Promise<strin
   ].join("\n");
 }
 
-/** `/sunup remove [confirm]` — deleting cascades all runs, responses, and participants. */
-export async function handleRemove(deps: Deps, channelId: string, confirmed: boolean): Promise<string> {
-  const standup = await deps.storage.getStandupByChannel(channelId);
-  if (!standup) return "No check-in in this channel — nothing to remove.";
+/** `/<kind> remove [confirm]` — deleting cascades all runs, responses, and participants. */
+export async function handleRemove(deps: Deps, channelId: string, confirmed: boolean, kind: StandupKind): Promise<string> {
+  const standup = await deps.storage.getStandupByChannel(channelId, kind);
+  if (!standup) return `No ${kind} check-in in this channel — nothing to remove.`;
   if (!confirmed) {
     const participants = await deps.storage.listParticipants(standup.id);
     return [
-      `⚠️ This will permanently delete *${standup.name}* — its ${participants.length} participant${participants.length === 1 ? "" : "s"} and all check-in history for this channel.`,
-      "If you're sure, run `/sunup remove confirm`.",
-      "(Just want out yourself? That's `/sunup leave`. Want to pause it? `/sunup config days` with fewer days.)",
+      `⚠️ This will permanently delete *${standup.name}* — its ${participants.length} participant${participants.length === 1 ? "" : "s"} and all its check-in history for this channel.`,
+      `If you're sure, run \`/${kind} remove confirm\`.`,
+      `(Just want out yourself? That's \`/${kind} leave\`. Want to pause it? \`/${kind} config days\` with fewer days.)`,
     ].join("\n");
   }
   await deps.storage.deleteStandup(standup.id);
-  return `🗑️ *${standup.name}* removed. Prompts and digests for this channel stop immediately. \`/sunup setup\` any time to start fresh.`;
+  return `🗑️ *${standup.name}* removed. Prompts and digests stop immediately. \`/${kind} setup\` any time to start fresh.`;
 }
 
-/** `/sunup config <field> <value>` */
-export async function handleConfig(deps: Deps, channelId: string, field: string, value: string): Promise<string> {
-  const standup = await deps.storage.getStandupByChannel(channelId);
-  if (!standup) return "No check-in in this channel yet — create one with `/sunup setup`.";
+/** `/<kind> config <field> <value>` */
+export async function handleConfig(deps: Deps, channelId: string, field: string, value: string, kind: StandupKind): Promise<string> {
+  const standup = await deps.storage.getStandupByChannel(channelId, kind);
+  if (!standup) return `No ${kind} check-in in this channel yet — create one with \`/${kind} setup\`.`;
 
   switch (field) {
     case "prompt":
@@ -150,13 +153,13 @@ export async function handleConfig(deps: Deps, channelId: string, field: string,
       return `Unknown field \`${field}\`.\n${HELP_TEXT}`;
   }
   await deps.storage.updateStandup(standup);
-  return `✅ Updated — here's the current setup:\n\n${await handleStatus(deps, channelId)}`;
+  return `✅ Updated — here's the current setup:\n\n${await handleStatus(deps, channelId, kind)}`;
 }
 
-/** `/sunup questions Q1 | Q2 | Q3` */
-export async function handleQuestions(deps: Deps, channelId: string, raw: string): Promise<string> {
-  const standup = await deps.storage.getStandupByChannel(channelId);
-  if (!standup) return "No check-in in this channel yet — create one with `/sunup setup`.";
+/** `/<kind> questions Q1 | Q2 | Q3` */
+export async function handleQuestions(deps: Deps, channelId: string, raw: string, kind: StandupKind): Promise<string> {
+  const standup = await deps.storage.getStandupByChannel(channelId, kind);
+  if (!standup) return `No ${kind} check-in in this channel yet — create one with \`/${kind} setup\`.`;
   const questions = raw
     .split("|")
     .map((q) => q.trim())
@@ -171,10 +174,10 @@ export async function handleQuestions(deps: Deps, channelId: string, raw: string
  * Resolve which standup a user means when they run `/sunup` bare: the current
  * channel's standup if it has one, else their only standup, else null.
  */
-export async function resolveStandupForCheckin(deps: Deps, channelId: string, userId: string): Promise<Standup | null> {
-  const byChannel = await deps.storage.getStandupByChannel(channelId);
+export async function resolveStandupForCheckin(deps: Deps, channelId: string, userId: string, kind: StandupKind): Promise<Standup | null> {
+  const byChannel = await deps.storage.getStandupByChannel(channelId, kind);
   if (byChannel) return byChannel;
-  const mine = await deps.storage.listStandupsForUser(userId);
+  const mine = (await deps.storage.listStandupsForUser(userId)).filter((s) => s.kind === kind);
   return mine.length === 1 ? (mine[0] ?? null) : null;
 }
 
@@ -219,8 +222,10 @@ export async function handleCheckinSubmission(deps: Deps, standup: Standup, resp
   await deps.storage.upsertResponse(response);
   const run = await deps.storage.getRunById(response.runId);
 
+  const behavior = kindBehavior(standup);
+
   // Blocker lifecycle: a blocker answer opens/confirms; an all-clear resolves.
-  if (run) {
+  if (run && behavior.trackBlockers) {
     const blockerAnswer = (response.answers[standup.questions.length - 1] ?? "").trim();
     const open = await deps.storage.getOpenBlocker(standup.id, response.userId);
     if (isBlocker(blockerAnswer)) {
@@ -249,7 +254,7 @@ export async function handleCheckinSubmission(deps: Deps, standup: Standup, resp
 
   const history = await deps.storage.listUserRunHistory(standup.id, response.userId, 30);
   const streak = computeStreak(history, run?.runDate ?? "");
-  const streakNote = streak >= 2 ? `  🔥 That's a *${streak}-day streak*.` : "";
+  const streakNote = behavior.celebrateStreaks && streak >= 2 ? `  🔥 That's a *${streak}-day streak*.` : "";
   const dm = await deps.slack.openDm(response.userId);
   await deps.slack.postMessage(
     dm,
@@ -273,12 +278,12 @@ export async function handleBlockerAction(deps: Deps, blockerId: number, resolve
   return "😤 Noted — it stays on the board until it's resolved. Hang in there.";
 }
 
-/** `/sunup snooze <days|off>` — pause the invoker's prompts for this channel's standup. */
-export async function handleSnooze(deps: Deps, channelId: string, userId: string, arg: string, now: Date): Promise<string> {
-  const standup = await deps.storage.getStandupByChannel(channelId);
-  if (!standup) return "No check-in in this channel yet — create one with `/sunup setup`.";
+/** `/<kind> snooze <days|off>` — pause the invoker's prompts for this channel's standup. */
+export async function handleSnooze(deps: Deps, channelId: string, userId: string, arg: string, now: Date, kind: StandupKind): Promise<string> {
+  const standup = await deps.storage.getStandupByChannel(channelId, kind);
+  if (!standup) return `No ${kind} check-in in this channel yet — create one with \`/${kind} setup\`.`;
   const participants = await deps.storage.listParticipants(standup.id);
-  if (!participants.some((p) => p.userId === userId)) return "You're not part of this check-in — `/sunup join` first.";
+  if (!participants.some((p) => p.userId === userId)) return `You're not part of this check-in — \`/${kind} join\` first.`;
 
   if (arg === "off" || arg === "resume") {
     await deps.storage.setSnooze(standup.id, userId, null);
@@ -326,7 +331,9 @@ export async function publishHome(deps: Deps, userId: string, now: Date): Promis
       responseCount: r.responseCount,
     }));
     // Blocker board — open ones with age first, then recently resolved wins.
-    const blockers = [
+    const blockers = !kindBehavior(standup).trackBlockers
+      ? []
+      : [
       ...(await deps.storage.listOpenBlockers(standup.id)).map((b) => ({
         userId: b.userId,
         text: b.text.split("\n")[0] ?? "",

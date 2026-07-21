@@ -1,5 +1,5 @@
 import type { Blocker, CheckinResponse, Run, Standup } from "../types";
-import { blockerAgeDays } from "../types";
+import { blockerAgeDays, kindBehavior } from "../types";
 import { formatRunDate } from "../time";
 
 export const CHECKIN_MODAL_CALLBACK_ID = "sunup_checkin_modal";
@@ -64,7 +64,7 @@ export function buildCheckinModal(standup: Standup, run: Run, existing: CheckinR
     blocks: [
       {
         type: "context",
-        elements: [{ type: "mrkdwn", text: `☀️ Check-in for *${formatRunDate(run.runDate)}*` }],
+        elements: [{ type: "mrkdwn", text: `${kindBehavior(standup).emoji} Check-in for *${formatRunDate(run.runDate)}*` }],
       },
       ...blocks,
     ],
@@ -84,7 +84,7 @@ export function buildPromptMessage(
 ): { text: string; blocks: unknown[] } {
   const text = isReminder
     ? `⏰ Friendly nudge — your *${standup.name}* check-in hasn't been submitted yet.`
-    : `☀️ Good morning! Time for your *${standup.name}* check-in.`;
+    : kindBehavior(standup).greeting(standup.name);
   const blocks: unknown[] = [
     { type: "section", text: { type: "mrkdwn", text } },
     {

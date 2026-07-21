@@ -1,8 +1,73 @@
+/** The kinds of scheduled check-in forms. */
+export type StandupKind = "sunup" | "sundown";
+
+/** Per-kind personality: defaults, tone, and which mechanics apply. */
+export interface KindBehavior {
+  emoji: string;
+  /** DM prompt greeting. */
+  greeting: (name: string) => string;
+  defaultName: string;
+  defaultQuestions: string[];
+  defaultPromptTime: string;
+  defaultDigestTime: string;
+  defaultIncludeMood: boolean;
+  /** Streak milestones in digest + streak note in DMs. */
+  celebrateStreaks: boolean;
+  /** Blocker lifecycle: open/confirm/resolve + follow-up buttons + digest section. */
+  trackBlockers: boolean;
+  /** "Waiting on: …" line in the digest. */
+  showWaitingOn: boolean;
+  /** Weekly retro after the last scheduled day. */
+  weeklyRetro: boolean;
+}
+
+export const KIND_BEHAVIOR: Record<StandupKind, KindBehavior> = {
+  sunup: {
+    emoji: "☀️",
+    greeting: (name) => `☀️ Good morning! Time for your *${name}* check-in.`,
+    defaultName: "Daily Check-in",
+    defaultQuestions: [
+      "What did you get done since your last check-in?",
+      "What are you focusing on today?",
+      "Anything blocking you?",
+    ],
+    defaultPromptTime: "09:00",
+    defaultDigestTime: "11:30",
+    defaultIncludeMood: true,
+    celebrateStreaks: true,
+    trackBlockers: true,
+    showWaitingOn: true,
+    weeklyRetro: true,
+  },
+  sundown: {
+    emoji: "🌇",
+    greeting: (name) => `🌇 Winding down — time for your *${name}* checkout.`,
+    defaultName: "Daily Checkout",
+    defaultQuestions: [
+      "What shipped today?",
+      "What's carrying over to tomorrow?",
+      "Any wins worth celebrating?",
+    ],
+    defaultPromptTime: "16:30",
+    defaultDigestTime: "17:30",
+    defaultIncludeMood: false,
+    celebrateStreaks: false,
+    trackBlockers: false,
+    showWaitingOn: false,
+    weeklyRetro: false,
+  },
+};
+
+export function kindBehavior(standup: Standup): KindBehavior {
+  return KIND_BEHAVIOR[standup.kind];
+}
+
 /** A recurring async check-in attached to one Slack channel. */
 export interface Standup {
   id: number;
   name: string;
   channelId: string;
+  kind: StandupKind;
   /** Ordered question prompts. By convention the last question is the blockers question. */
   questions: string[];
   /** Days the check-in runs: 0 = Sunday … 6 = Saturday. */

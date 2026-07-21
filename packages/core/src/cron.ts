@@ -1,6 +1,6 @@
 import type { Storage } from "./ports";
 import { SlackClient } from "./slack";
-import { isSnoozed, type CheckinResponse, type Participant, type Standup } from "./types";
+import { isSnoozed, kindBehavior, type CheckinResponse, type Participant, type Standup } from "./types";
 import { addDays, localParts, parseHM } from "./time";
 import { buildDigest } from "./blocks/digest";
 import { buildPromptMessage } from "./blocks/checkin-modal";
@@ -106,7 +106,8 @@ async function tickStandup(deps: Deps, standup: Standup, now: Date): Promise<voi
   const responses = await deps.storage.listResponses(run.id);
   const responded = new Set(responses.map((r) => r.userId));
   const state = new Map(runParticipants.map((rp) => [rp.userId, rp]));
-  const openBlockers = await deps.storage.listOpenBlockers(standup.id);
+  const behavior = kindBehavior(standup);
+  const openBlockers = behavior.trackBlockers ? await deps.storage.listOpenBlockers(standup.id) : [];
   // Follow up on blockers carried over from a previous day, not today's.
   const carriedBlockerByUser = new Map(openBlockers.filter((b) => b.openedDate < anchor.date).map((b) => [b.userId, b]));
 
@@ -151,7 +152,7 @@ async function tickStandup(deps: Deps, standup: Standup, now: Date): Promise<voi
     let digestJustPosted = false;
     if (!run.digestPostedAt) {
       const active = participants.filter((p) => !isSnoozed(p, anchor.date));
-      const streaks = await streaksForResponders(deps, standup, responses, anchor.date);
+      const streaks = behavior.celebrateStreaks ? await streaksForResponders(deps, standup, responses, anchor.date) : {};
       const digest = buildDigest(standup, run, responses, active, streaks, openBlockers);
       const posted = await deps.slack.postMessage(standup.channelId, digest.text, digest.blocks);
       await deps.storage.markDigestPosted(run.id, nowIso, posted.ts ?? null);
@@ -160,6 +161,7 @@ async function tickStandup(deps: Deps, standup: Standup, now: Date): Promise<voi
 
     // Weekly retro: after the daily digest on the week's last scheduled day.
     if (
+      behavior.weeklyRetro &&
       (digestJustPosted || run.digestPostedAt) &&
       anchor.weekday === lastScheduledDay(standup.scheduleDays) &&
       standup.lastRetroDate !== anchor.date
