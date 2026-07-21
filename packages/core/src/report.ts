@@ -119,7 +119,8 @@ function participationSvg(data: ReportData): string {
         `<line x1="26" y1="${chartH - g * chartH}" x2="${w}" y2="${chartH - g * chartH}" class="grid"/><text x="22" y="${chartH - g * chartH + 4}" text-anchor="end" class="tick">${Math.round(g * 100)}%</text>`,
     )
     .join("");
-  return `<svg viewBox="0 0 ${w} ${chartH + labelH}" role="img" aria-label="Participation per run">${grid}${bars}</svg>`;
+  // -10 top headroom so the 100% gridline label isn't clipped at the viewBox edge.
+  return `<svg viewBox="0 -10 ${w} ${chartH + labelH + 10}" role="img" aria-label="Participation per run">${grid}${bars}</svg>`;
 }
 
 /** Line chart of team mood average per run (runs with 3+ mood responses). */
@@ -149,7 +150,7 @@ function moodSvg(data: ReportData): string {
     .filter((_p, idx) => idx % labelEvery === 0)
     .map((p) => `<text x="${x(p.i)}" y="${chartH + 16}" text-anchor="middle" class="tick">${shortDate(p.runDate)}</text>`)
     .join("");
-  return `<svg viewBox="0 0 ${w} ${chartH + labelH}" role="img" aria-label="Team mood per run">${grid}<polyline points="${poly}" class="line"/>${dots}${labels}</svg>`;
+  return `<svg viewBox="0 -6 ${w} ${chartH + labelH + 6}" role="img" aria-label="Team mood per run">${grid}<polyline points="${poly}" class="line"/>${dots}${labels}</svg>`;
 }
 
 /**
