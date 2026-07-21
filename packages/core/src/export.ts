@@ -30,6 +30,30 @@ export async function verifyExportToken(secret: string, token: string, nowUnixSe
   return Number.isInteger(id) && id > 0 ? id : null;
 }
 
+export type ReportRange = "week" | "month" | "quarter";
+export const REPORT_RANGE_DAYS: Record<ReportRange, number> = { week: 7, month: 30, quarter: 90 };
+
+/** Report token: `report.<standupId>.<range>.<expiresUnixSec>.<hmacHex>`. */
+export async function makeReportToken(secret: string, standupId: number, range: ReportRange, expiresUnixSec: number): Promise<string> {
+  const payload = `report.${standupId}.${range}.${expiresUnixSec}`;
+  return `${payload}.${await hmacHex(secret, payload)}`;
+}
+
+export async function verifyReportToken(
+  secret: string,
+  token: string,
+  nowUnixSec: number,
+): Promise<{ standupId: number; range: ReportRange } | null> {
+  const [tag, idStr, range, expStr, mac] = token.split(".");
+  if (tag !== "report" || !idStr || !range || !expStr || !mac) return null;
+  const expected = await hmacHex(secret, `report.${idStr}.${range}.${expStr}`);
+  if (mac.length !== expected.length || [...mac].some((c, i) => c !== expected[i])) return null;
+  if (Number(expStr) < nowUnixSec) return null;
+  const id = Number(idStr);
+  if (!Number.isInteger(id) || id <= 0 || !(range in REPORT_RANGE_DAYS)) return null;
+  return { standupId: id, range: range as ReportRange };
+}
+
 function csvCell(value: string | number | null): string {
   let s = value == null ? "" : String(value);
   // Neutralize spreadsheet formula injection.

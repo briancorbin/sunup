@@ -47,6 +47,19 @@ export class SlackClient {
     return this.call("views.publish", { user_id: userId, view });
   }
 
+  /** Human display name for a user, or null if unavailable. */
+  async userLabel(userId: string): Promise<string | null> {
+    try {
+      const res = await this.call<{ user: { name?: string; real_name?: string; profile?: { display_name?: string } } }>(
+        "users.info",
+        { user: userId },
+      );
+      return res.user.profile?.display_name || res.user.real_name || res.user.name || null;
+    } catch {
+      return null;
+    }
+  }
+
   /** User's IANA timezone, or null if unavailable. */
   async userTz(userId: string): Promise<string | null> {
     try {

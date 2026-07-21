@@ -1,7 +1,7 @@
 import { serve } from "@hono/node-server";
 import { DatabaseSync } from "node:sqlite";
 import { SlackClient, runCron, type Deps } from "@sunup/core";
-import { createSlackApp, handleExportRequest } from "@sunup/slack-app";
+import { createSlackApp, handleExportRequest, handleReportRequest } from "@sunup/slack-app";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { migrate } from "./migrate";
@@ -47,6 +47,9 @@ serve({
     if (request.method === "GET" && url.pathname === "/healthz") return new Response("ok");
     if (request.method === "GET" && url.pathname === "/export") {
       return await handleExportRequest(deps.storage, signingSecret, url);
+    }
+    if (request.method === "GET" && url.pathname === "/report") {
+      return await handleReportRequest(deps, signingSecret, url);
     }
     return await app.run(request);
   },

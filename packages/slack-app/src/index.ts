@@ -23,18 +23,23 @@ import {
   handleSetup,
   handleSnooze,
   handleStatus,
+  buildReportData,
   makeExportToken,
+  makeReportToken,
   openCheckinModal,
   openCheckinModalForRun,
   parseCheckinSubmission,
   parseConfigSubmission,
   publishHome,
+  renderReportHtml,
   resolveStandupForCheckin,
   toCsv,
   verifyExportToken,
+  verifyReportToken,
   type CheckinModalMetadata,
   type ConfigModalMetadata,
   type Deps,
+  type ReportRange,
   type Storage,
 } from "@sunup/core";
 
@@ -61,6 +66,37 @@ export async function handleExportRequest(storage: Storage, signingSecret: strin
       "Content-Disposition": `attachment; filename="${filename}"`,
       "Cache-Control": "no-store",
     },
+  });
+}
+
+/** GET /report?token=… — charted report page behind a 24h HMAC-signed link. */
+export async function handleReportRequest(deps: Deps, signingSecret: string, url: URL): Promise<Response> {
+  const token = url.searchParams.get("token") ?? "";
+  const verified = await verifyReportToken(signingSecret, token, Math.floor(Date.now() / 1000));
+  if (!verified) return new Response("This report link is invalid or expired — run /sunup report again.", { status: 403 });
+  const standup = await deps.storage.getStandup(verified.standupId);
+  if (!standup) return new Response("Check-in not found.", { status: 404 });
+
+  const data = await buildReportData(deps.storage, standup, verified.range, new Date());
+
+  // Resolve display names once per unique user; fall back to the raw id.
+  const userIds = new Set<string>([
+    ...data.streaks.map((s) => s.userId),
+    ...data.kudos.map((k) => k.userId),
+    ...data.openBlockers.map((b) => b.userId),
+    ...data.resolvedBlockers.map((b) => b.userId),
+  ]);
+  const names = new Map<string, string>();
+  await Promise.all(
+    [...userIds].map(async (id) => {
+      const label = await deps.slack.userLabel(id);
+      if (label) names.set(id, label);
+    }),
+  );
+
+  const html = renderReportHtml(standup, data, (id) => names.get(id) ?? id);
+  return new Response(html, {
+    headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" },
   });
 }
 
@@ -126,6 +162,20 @@ export function createSlackApp(opts: SlackAppOptions): SlackApp<SlackEdgeAppEnv>
             return respond(
               `📄 CSV export of *${standup.name}* — link valid for 15 minutes:\n${origin}/export?token=${token}`,
             );
+          }
+          case "report": {
+            const standup = await deps.storage.getStandupByChannel(channelId, kind);
+            if (!standup) return respond(`No ${kind} check-in in this channel yet — create one with \`/${kind} setup\`.`);
+            const words = argText.toLowerCase().split(/\s+/).filter(Boolean);
+            const range = ((["week", "month", "quarter"] as const).find((r) => words.includes(r)) ?? "month") as ReportRange;
+            const expires = Math.floor(Date.now() / 1000) + 24 * 60 * 60;
+            const token = await makeReportToken(opts.signingSecret, standup.id, range, expires);
+            const text = `📊 *${standup.name}* — ${range} report (link valid 24h):\n${origin}/report?token=${token}`;
+            if (words.includes("share")) {
+              await deps.slack.postMessage(channelId, text);
+              return;
+            }
+            return respond(text);
           }
           case "snooze":
             return respond(await handleSnooze(deps, channelId, userId, argText.toLowerCase(), new Date(), kind));

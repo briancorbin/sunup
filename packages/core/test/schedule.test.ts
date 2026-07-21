@@ -8,8 +8,12 @@ import {
   isBlocker,
   lastScheduledDay,
   makeExportToken,
+  makeReportToken,
   parseConfigSubmission,
+  renderReportHtml,
   toCsv,
+  verifyReportToken,
+  type ReportData,
   verifyExportToken,
   type Participant,
   type Standup,
@@ -157,6 +161,45 @@ describe("export", () => {
     ]);
     expect(csv).toContain('"said ""done"", shipped"');
     expect(csv).toContain("'=HYPERLINK(evil)");
+  });
+});
+
+describe("report", () => {
+  it("round-trips report tokens and rejects export tokens / bad ranges", async () => {
+    const token = await makeReportToken("secret", 7, "month", 1000);
+    expect(await verifyReportToken("secret", token, 999)).toEqual({ standupId: 7, range: "month" });
+    expect(await verifyReportToken("secret", token, 1001)).toBeNull(); // expired
+    expect(await verifyReportToken("other", token, 999)).toBeNull(); // wrong key
+    expect(await verifyReportToken("secret", await makeExportToken("secret", 7, 1000), 999)).toBeNull(); // wrong token type
+  });
+
+  it("renders charts and escapes hostile text", () => {
+    const data: ReportData = {
+      range: "month",
+      startDate: "2026-06-21",
+      endDate: "2026-07-20",
+      teamSize: 4,
+      runs: [
+        { runDate: "2026-07-16", responseCount: 4, moodAvg: 4.2 },
+        { runDate: "2026-07-17", responseCount: 3, moodAvg: 3.8 },
+        { runDate: "2026-07-20", responseCount: 2, moodAvg: null },
+      ],
+      totalCheckins: 9,
+      responseRate: 0.75,
+      streaks: [{ userId: "U1", streak: 12 }],
+      kudos: [{ userId: "U2", count: 3 }],
+      openBlockers: [{ userId: "U1", text: "<script>alert('xss')</script>", ageDays: 3 }],
+      resolvedBlockers: [{ userId: "U2", text: "creds & tokens", days: 2 }],
+      avgResolveDays: 2,
+    };
+    const html = renderReportHtml(standup, data, (id) => (id === "U1" ? "Priya <dev>" : id));
+    expect(html).toContain("<svg"); // both charts render
+    expect(html).toContain("polyline");
+    expect(html).not.toContain("<script>alert"); // escaped
+    expect(html).toContain("&lt;script&gt;");
+    expect(html).toContain("Priya &lt;dev&gt;");
+    expect(html).toContain("creds &amp; tokens");
+    expect(html).toContain("75%");
   });
 });
 

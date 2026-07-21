@@ -19,6 +19,7 @@ export const HELP_TEXT = [
   "`/sunup config` — open the settings editor (or `/sunup config <field> <value>` for quick edits: `prompt HH:MM`, `digest HH:MM`, `days mon,tue,...`, `tz <IANA>`, `reminder <minutes>`, `mood on|off`, `name <text>`)",
   "`/sunup snooze <days>` / `/sunup snooze off` — pause your prompts (vacation mode)",
   "`/sunup export` — CSV of this channel's full check-in history (15-min link)",
+  "`/sunup report [week|month|quarter]` — charted team report page (24h link; add `share` to post it to the channel)",
   "`/sundown …` — the evening checkout: same subcommands, sunset edition (what shipped, what carries over, wins)",
   "`/sunup remove` — delete this channel's check-in (asks for confirmation)",
   "`/sunup questions Q1 | Q2 | Q3` — set questions (last one is the blockers question)",

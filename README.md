@@ -30,6 +30,7 @@
 - **🌇 `/sundown`** — an optional evening checkout twin: what shipped, what's carrying over, wins worth celebrating. Same engine, sunset tone — a channel can run both a morning check-in and an evening checkout.
 - **📆 Weekly retro** — on the week's last scheduled day, a summary posts after the digest: participation by day, mood trend, every blocker from the week, kudos totals, and streak leaders.
 - **📄 CSV export** — `/sunup export` gives a 15-minute signed download link for the channel's full history. No extra Slack scopes; your own Worker serves it.
+- **📊 Report pages** — `/sunup report` mints a 24-hour signed link to a charted, printable team report: participation and mood trends (inline SVG, no external anything), blocker aging stats, streak and kudos leaderboards. Dark-mode aware, share-in-channel with `report share`.
 - **🏠 Dashboard** — click sunup in your sidebar: today's status, streaks, team participation history, and the kudos leaderboard, right in Slack's App Home.
 
 **Privacy by design:** sunup requests *no message-reading scopes*. It only ever sees what people type into its own forms. Scopes: `chat:write`, `commands`, `im:write`, `users:read` (the last one just for timezones).
@@ -103,6 +104,7 @@ Teammates run `/sunup join`. That's it. `/sunup help` shows everything else:
 | `/sunup questions Q1 \| Q2 \| Q3` | Set custom questions (the last is the blockers question) |
 | `/sunup snooze 5` / `snooze off` | Vacation mode — pause your prompts, skip "waiting on" |
 | `/sunup export` | CSV of the channel's full check-in history (15-min signed link) |
+| `/sunup report [week\|month\|quarter]` | Charted report page — participation & mood trends, blocker stats, leaderboards (24h signed link; add `share` to post it in the channel) |
 | `/sunup remove` | Delete the channel's check-in and its history (asks to confirm) |
 | `/sundown …` | Evening checkout — all the same subcommands as `/sunup` |
 | `/kudos @user <message>` | Celebrate a teammate |

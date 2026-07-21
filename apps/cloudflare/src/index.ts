@@ -1,5 +1,5 @@
 import { runCron } from "@sunup/core";
-import { createSlackApp, handleExportRequest } from "@sunup/slack-app";
+import { createSlackApp, handleExportRequest, handleReportRequest } from "@sunup/slack-app";
 import { buildDeps, type Env } from "./app";
 
 export default {
@@ -8,6 +8,9 @@ export default {
     const deps = buildDeps(env);
     if (request.method === "GET" && url.pathname === "/export") {
       return await handleExportRequest(deps.storage, env.SLACK_SIGNING_SECRET, url);
+    }
+    if (request.method === "GET" && url.pathname === "/report") {
+      return await handleReportRequest(deps, env.SLACK_SIGNING_SECRET, url);
     }
     const app = createSlackApp({
       deps,
