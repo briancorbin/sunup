@@ -6,13 +6,21 @@ export class SlackClient {
   constructor(private readonly botToken: string) {}
 
   async call<T = Record<string, unknown>>(method: string, params: Record<string, unknown> = {}): Promise<T> {
+    // Form-encoded, not JSON: Slack accepts application/json only for a subset
+    // of methods — lookups like users.info silently reject it. Form encoding
+    // (complex values as JSON strings) works for every Web API method.
+    const form = new URLSearchParams();
+    for (const [key, value] of Object.entries(params)) {
+      if (value === undefined || value === null) continue;
+      form.set(key, typeof value === "string" ? value : JSON.stringify(value));
+    }
     const res = await fetch(`https://slack.com/api/${method}`, {
       method: "POST",
       headers: {
-        "Content-Type": "application/json; charset=utf-8",
+        "Content-Type": "application/x-www-form-urlencoded; charset=utf-8",
         Authorization: `Bearer ${this.botToken}`,
       },
-      body: JSON.stringify(params),
+      body: form.toString(),
     });
     const data = (await res.json()) as { ok: boolean; error?: string } & T;
     if (!data.ok) {
