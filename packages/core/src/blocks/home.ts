@@ -14,7 +14,16 @@ export interface HomeStandupStats {
   blockers: Array<{ userId: string; text: string; status: "open" | "resolved"; ageDays: number }>;
 }
 
-export function buildHomeView(userId: string, stats: HomeStandupStats[], leaderboard: LeaderboardEntry[]): unknown {
+/**
+ * `mention` should return `<@id>` for users Slack can render and a visible
+ * fallback for ones it can't (departed users render as empty pills otherwise).
+ */
+export function buildHomeView(
+  userId: string,
+  stats: HomeStandupStats[],
+  leaderboard: LeaderboardEntry[],
+  mention: (userId: string) => string = (id) => `<@${id}>`,
+): unknown {
   const blocks: unknown[] = [
     { type: "header", text: { type: "plain_text", text: "☀️ Sunup" } },
   ];
@@ -51,15 +60,15 @@ export function buildHomeView(userId: string, stats: HomeStandupStats[], leaderb
         text: [
           `*${s.standup.name}*  ·  <#${s.standup.channelId}>`,
           today,
-          `🔥 Streak: *${s.streak}*   ·   Team participation (last ${s.recentRuns.length} runs): ${participation || "_no runs yet_"}`,
+          `🔥 Streak: *${s.streak}*   ·   Team participation (last ${s.recentRuns.length} run${s.recentRuns.length === 1 ? "" : "s"}): ${participation || "_no runs yet_"}`,
         ].join("\n"),
       },
     });
     if (s.blockers.length > 0) {
       const lines = s.blockers.map((b) =>
         b.status === "open"
-          ? `🔴 <@${b.userId}>: ${b.text}${b.ageDays > 1 ? `  _(${b.ageDays} days)_` : ""}`
-          : `✅ <@${b.userId}>: ${b.text}`,
+          ? `🔴 ${mention(b.userId)}: ${b.text}${b.ageDays > 1 ? `  _(${b.ageDays} days)_` : ""}`
+          : `✅ ${mention(b.userId)}: ${b.text}`,
       );
       blocks.push({
         type: "section",
@@ -69,7 +78,7 @@ export function buildHomeView(userId: string, stats: HomeStandupStats[], leaderb
   }
 
   blocks.push({ type: "divider" });
-  blocks.push({ type: "section", text: { type: "mrkdwn", text: `*🏆 Kudos leaderboard (30 days)*\n${formatLeaderboard(leaderboard)}` } });
+  blocks.push({ type: "section", text: { type: "mrkdwn", text: `*🏆 Kudos leaderboard (30 days)*\n${formatLeaderboard(leaderboard, mention)}` } });
   blocks.push({
     type: "context",
     elements: [{ type: "mrkdwn", text: "sunup — open-source async check-ins · `/sunup help` for commands" }],

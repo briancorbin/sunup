@@ -352,5 +352,17 @@ export async function publishHome(deps: Deps, userId: string, now: Date): Promis
   }
   const since = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000).toISOString();
   const leaderboard = await deps.storage.kudosLeaderboard(since, 10);
-  await deps.slack.publishHome(userId, buildHomeView(userId, stats, leaderboard));
+
+  // Slack renders mentions of unresolvable users (departed, demo) as empty
+  // pills in App Home — verify each id once and fall back to visible text.
+  const mentionIds = new Set<string>([...leaderboard.map((e) => e.userId), ...stats.flatMap((s) => s.blockers.map((b) => b.userId))]);
+  const resolvable = new Set<string>();
+  await Promise.all(
+    [...mentionIds].map(async (id) => {
+      if ((await deps.slack.userLabel(id)) != null) resolvable.add(id);
+    }),
+  );
+  const mention = (id: string) => (resolvable.has(id) ? `<@${id}>` : `\`${id}\``);
+
+  await deps.slack.publishHome(userId, buildHomeView(userId, stats, leaderboard, mention));
 }
