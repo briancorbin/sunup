@@ -74,7 +74,8 @@ export async function buildReportData(storage: Storage, standup: Standup, range:
     teamSize: participants.length,
     runs: runStats,
     totalCheckins,
-    responseRate: possible > 0 ? totalCheckins / possible : 0,
+    // Clamped: ex-participants' historical responses can push the raw ratio past 1.
+    responseRate: possible > 0 ? Math.min(1, totalCheckins / possible) : 0,
     streaks: streaks.slice(0, 5),
     kudos: await storage.kudosLeaderboard(`${startDate}T00:00:00Z`, 5),
     openBlockers: open.sort((a, b) => b.ageDays - a.ageDays),

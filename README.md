@@ -35,6 +35,20 @@
 
 **Privacy by design:** sunup requests *no message-reading scopes*. It only ever sees what people type into its own forms. Scopes: `chat:write`, `commands`, `im:write`, `users:read` (the last one just for timezones).
 
+## What it looks like
+
+<p align="center">
+  <img src="assets/screenshots/report.png" width="760" alt="A sunup report page: stat cards, participation bar chart, mood trend line, blocker aging, streak and kudos leaderboards"/>
+</p>
+<p align="center"><i>The <code>/sunup report</code> page — served by your own instance behind a 24-hour signed link.</i></p>
+
+<!--
+More screenshots welcome here: capture at ~1200px wide and drop into assets/screenshots/
+  - digest.png: a channel digest showing the 🚧 Blockers section and waiting-on line
+  - home.png:  the App Home dashboard (streaks, participation squares, blocker board)
+-->
+
+
 ## Setup (~15 minutes)
 
 You'll deploy your own instance: your Slack app, your Cloudflare account, your database.

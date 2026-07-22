@@ -1,0 +1,50 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 640" width="1280" height="640">
+  <defs>
+    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#fef7ea"/>
+      <stop offset="1" stop-color="#f7d9a4"/>
+    </linearGradient>
+    <clipPath id="body"><ellipse cx="0" cy="22" rx="18" ry="15"/></clipPath>
+  </defs>
+
+  <rect width="1280" height="640" fill="url(#sky)"/>
+
+  <!-- left: the robin at sunup mark -->
+  <g transform="translate(60 90) scale(1.9)">
+    <g stroke="#f2b544" stroke-width="6" stroke-linecap="round">
+      <line x1="120" y1="30" x2="120" y2="10"/>
+      <line x1="70" y1="50" x2="56" y2="36"/>
+      <line x1="170" y1="50" x2="184" y2="36"/>
+      <line x1="48" y1="94" x2="28" y2="88"/>
+      <line x1="192" y1="94" x2="212" y2="88"/>
+    </g>
+    <path d="M 56 118 A 64 64 0 0 1 184 118 Z" fill="#f2a33c"/>
+    <line x1="8" y1="118" x2="232" y2="118" stroke="#3d3a34" stroke-width="6" stroke-linecap="round"/>
+    <g transform="translate(64 72)">
+      <line x1="-4" y1="34" x2="-4" y2="46" stroke="#3d3a34" stroke-width="2.5" stroke-linecap="round"/>
+      <line x1="5" y1="34" x2="5" y2="46" stroke="#3d3a34" stroke-width="2.5" stroke-linecap="round"/>
+      <path d="M -12 16 L -34 26 L -28 32 L -10 26 Z" fill="#4a4640"/>
+      <ellipse cx="0" cy="22" rx="18" ry="15" fill="#4a4640"/>
+      <circle cx="11" cy="31" r="15" fill="#d95d39" clip-path="url(#body)"/>
+      <circle cx="12" cy="6" r="10" fill="#4a4640"/>
+      <path d="M 16 -1 A 10 10 0 0 1 21 11 L 12 8 Z" fill="#d95d39"/>
+      <path d="M 21 4 L 31 7 L 21 10 Z" fill="#e8a33d"/>
+      <circle cx="13" cy="3.5" r="1.9" fill="#fffdf7"/>
+    </g>
+  </g>
+
+  <!-- right: wordmark + pitch -->
+  <g font-family="Avenir Next, Avenir, Helvetica Neue, Arial, sans-serif" fill="#3d3a34">
+    <text x="560" y="255" font-size="110" font-weight="700">sunup</text>
+    <text x="564" y="325" font-size="38" font-weight="500">Async daily check-ins for Slack</text>
+    <text x="564" y="384" font-size="30" fill="#8a8578">self-hosted&#160;&#160;·&#160;&#160;open source&#160;&#160;·&#160;&#160;free forever</text>
+    <g transform="translate(564 430)">
+      <rect x="0" y="0" width="500" height="52" rx="26" fill="#f2a33c" opacity="0.25"/>
+      <text x="24" y="35" font-size="26" font-weight="600" fill="#8a5a1c">🔒 no message-reading scopes, ever</text>
+    </g>
+  </g>
+
+  <!-- footer horizon accent -->
+  <line x1="0" y1="600" x2="1280" y2="600" stroke="#3d3a34" stroke-width="8"/>
+  <text x="640" y="630" text-anchor="middle" font-family="Avenir Next, Avenir, Helvetica Neue, Arial, sans-serif" font-size="20" fill="#8a8578">github.com/briancorbin/sunup</text>
+</svg>
