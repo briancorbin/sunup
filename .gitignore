@@ -7,3 +7,5 @@ dist/
 *.db
 *.db-wal
 *.db-shm
+# Your real D1 id lives here, out of the diff (see README "Development").
+apps/cloudflare/wrangler.local.jsonc

@@ -193,6 +193,8 @@ npm run dev --workspace apps/cloudflare   # local Worker (pair with a tunnel for
 
 **Demo data:** want the dashboard and digests to look lived-in without waiting three weeks? `apps/cloudflare/scripts/seed-demo.mjs` generates a fake 4-engineer team with realistic check-in history, blockers, moods, and kudos around your real standup (see its header for usage; `--cleanup` emits the SQL to remove it all).
 
+**Deploying your own instance from a clone you also hack on:** `wrangler.jsonc` ships a placeholder `database_id` so your real one never lands in a diff. Copy it to `apps/cloudflare/wrangler.local.jsonc` (gitignored), paste your id there, and use `npm run deploy:mine` / `npm run db:migrate:mine --workspace apps/cloudflare` instead of `deploy` / `db:migrate`. It's a full copy, not an overlay — when `wrangler.jsonc` changes, update it too.
+
 For live Slack callbacks against a dev instance, either deploy a second Worker (e.g. `sunup-dev`) or run `wrangler dev` behind a tunnel (`cloudflared tunnel --url http://localhost:8787`) and point a dev Slack app's URLs at it.
 
 ## License
