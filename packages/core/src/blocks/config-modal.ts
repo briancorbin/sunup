@@ -1,5 +1,6 @@
 import type { Standup } from "../types";
 import { isValidTimezone } from "../time";
+import { MIN_REMINDER_MINUTES } from "../cron";
 
 export const CONFIG_MODAL_CALLBACK_ID = "sunup_config_modal";
 
@@ -126,6 +127,11 @@ export function parseConfigSubmission(standup: Standup, values: ViewValues): { s
     .filter(Boolean);
   if (questions.length === 0) errors.questions = "At least one question.";
 
+  const reminderMinutes = Number(values.reminder?.answer?.selected_option?.value ?? standup.reminderMinutes);
+  if (reminderMinutes > 0 && reminderMinutes < MIN_REMINDER_MINUTES) {
+    errors.reminder = `Off, or at least ${MIN_REMINDER_MINUTES} minutes — the scheduler ticks every ${MIN_REMINDER_MINUTES}.`;
+  }
+
   return {
     standup: {
       ...standup,
@@ -135,7 +141,7 @@ export function parseConfigSubmission(standup: Standup, values: ViewValues): { s
       digestTime: values.digest_time?.answer?.selected_time ?? standup.digestTime,
       timezone: isValidTimezone(timezone) ? timezone : standup.timezone,
       userTzPrompts: (values.tz_mode?.answer?.selected_option?.value ?? (standup.userTzPrompts ? "user" : "fixed")) === "user",
-      reminderMinutes: Number(values.reminder?.answer?.selected_option?.value ?? standup.reminderMinutes),
+      reminderMinutes,
       includeMood: (values.mood?.answer?.selected_option?.value ?? (standup.includeMood ? "on" : "off")) === "on",
       questions: questions.length > 0 ? questions : standup.questions,
     },

@@ -34,13 +34,14 @@ const standup: Standup = {
   reminderMinutes: 60,
   includeMood: true,
   lastRetroDate: null,
+  createdBy: "U_NYC",
 };
 
 const participants: Participant[] = [
-  { standupId: 1, userId: "U_NYC", tz: "America/New_York", snoozedUntil: null },
-  { standupId: 1, userId: "U_LON", tz: "Europe/London", snoozedUntil: null },
-  { standupId: 1, userId: "U_SFO", tz: "America/Los_Angeles", snoozedUntil: null },
-  { standupId: 1, userId: "U_NOTZ", tz: null, snoozedUntil: null },
+  { standupId: 1, userId: "U_NYC", tz: "America/New_York", snoozedUntil: null, lastPromptDate: null },
+  { standupId: 1, userId: "U_LON", tz: "Europe/London", snoozedUntil: null, lastPromptDate: null },
+  { standupId: 1, userId: "U_SFO", tz: "America/Los_Angeles", snoozedUntil: null, lastPromptDate: null },
+  { standupId: 1, userId: "U_NOTZ", tz: null, snoozedUntil: null, lastPromptDate: null },
 ];
 
 describe("localParts", () => {
@@ -70,33 +71,42 @@ describe("parseHM", () => {
 });
 
 describe("computeDuePrompts", () => {
+  const ids = (due: ReturnType<typeof computeDuePrompts>) => due.map((d) => d.participant.userId);
+
   it("prompts each user at their own local 09:00", () => {
     // 13:05 UTC Monday: NYC is 09:05 (due), London is 14:05 (due), LA is 06:05 (not yet).
     const now = new Date("2026-07-20T13:05:00Z");
-    const due = computeDuePrompts(now, standup, participants, "2026-07-20").map((p) => p.userId);
-    expect(due).toContain("U_NYC");
-    expect(due).toContain("U_LON");
-    expect(due).not.toContain("U_SFO");
+    const due = computeDuePrompts(now, standup, participants);
+    expect(ids(due)).toContain("U_NYC");
+    expect(ids(due)).toContain("U_LON");
+    expect(ids(due)).not.toContain("U_SFO");
     // No cached tz falls back to the standup timezone (NYC → due).
-    expect(due).toContain("U_NOTZ");
+    expect(ids(due)).toContain("U_NOTZ");
+    // Each carries the participant's OWN local date.
+    expect(due.find((d) => d.participant.userId === "U_LON")?.localDate).toBe("2026-07-20");
   });
 
-  it("skips snoozed participants until their snooze expires", () => {
+  it("is judged by the participant's own weekday, not the channel's", () => {
+    // 00:30 UTC Saturday = Friday 20:30 in NYC (channel), but Saturday 09:30 in Tokyo.
+    const now = new Date("2026-07-25T00:30:00Z");
+    const tokyo: Participant = { standupId: 1, userId: "U_TYO", tz: "Asia/Tokyo", snoozedUntil: null, lastPromptDate: null };
+    expect(ids(computeDuePrompts(now, standup, [tokyo]))).toEqual([]); // Saturday is not scheduled, even though it's Friday in NYC
+    // Monday 00:30 UTC = Sunday evening NYC, Monday 09:30 Tokyo → due for Tokyo's Monday.
+    const due = computeDuePrompts(new Date("2026-07-20T00:30:00Z"), standup, [tokyo]);
+    expect(due).toEqual([{ participant: tokyo, localDate: "2026-07-20" }]);
+  });
+
+  it("handles each participant once per local day", () => {
     const now = new Date("2026-07-20T13:05:00Z");
-    const snoozed: Participant[] = [
-      { standupId: 1, userId: "U_PTO", tz: "America/New_York", snoozedUntil: "2026-07-24" },
-      { standupId: 1, userId: "U_BACK", tz: "America/New_York", snoozedUntil: "2026-07-19" },
-    ];
-    const due = computeDuePrompts(now, standup, snoozed, "2026-07-20").map((p) => p.userId);
-    expect(due).not.toContain("U_PTO");
-    expect(due).toContain("U_BACK");
+    const handled: Participant = { ...participants[0]!, lastPromptDate: "2026-07-20" };
+    const yesterday: Participant = { ...participants[0]!, lastPromptDate: "2026-07-17" };
+    expect(ids(computeDuePrompts(now, standup, [handled, yesterday]))).toEqual(["U_NYC"]);
   });
 
-  it("does not prompt for a different anchor date", () => {
-    // London has rolled into Tuesday; anchor date is still Monday in NYC.
+  it("is not due before local prompt time even when another timezone has rolled over", () => {
+    // London has rolled into Tuesday 01:30 — before 09:00, so not due.
     const now = new Date("2026-07-21T00:30:00Z");
-    const due = computeDuePrompts(now, standup, participants, "2026-07-20").map((p) => p.userId);
-    expect(due).not.toContain("U_LON");
+    expect(ids(computeDuePrompts(now, standup, participants))).not.toContain("U_LON");
   });
 });
 

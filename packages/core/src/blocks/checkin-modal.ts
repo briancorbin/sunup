@@ -1,3 +1,4 @@
+import { escapeMrkdwn } from "../mrkdwn";
 import type { Blocker, CheckinResponse, Run, Standup } from "../types";
 import { blockerAgeDays, kindBehavior } from "../types";
 import { formatRunDate } from "../time";
@@ -83,8 +84,8 @@ export function buildPromptMessage(
   todayDate?: string,
 ): { text: string; blocks: unknown[] } {
   const text = isReminder
-    ? `⏰ Friendly nudge — your *${standup.name}* check-in hasn't been submitted yet.`
-    : kindBehavior(standup).greeting(standup.name);
+    ? `⏰ Friendly nudge — your *${escapeMrkdwn(standup.name)}* check-in hasn't been submitted yet.`
+    : kindBehavior(standup).greeting(escapeMrkdwn(standup.name));
   const blocks: unknown[] = [
     { type: "section", text: { type: "mrkdwn", text } },
     {
@@ -109,7 +110,7 @@ export function buildPromptMessage(
         type: "section",
         text: {
           type: "mrkdwn",
-          text: `🚧 You said this was blocking you${age && age > 2 ? ` (*${age} days* now)` : ""}:\n> ${openBlocker.text.split("\n")[0]}\nStill blocked?`,
+          text: `🚧 You said this was blocking you${age && age > 2 ? ` (*${age} days* now)` : ""}:\n> ${escapeMrkdwn(openBlocker.text.split("\n")[0] ?? "")}\nStill blocked?`,
         },
       },
       {

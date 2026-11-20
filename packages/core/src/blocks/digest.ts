@@ -1,3 +1,4 @@
+import { escapeMrkdwn } from "../mrkdwn";
 import type { Blocker, CheckinResponse, Participant, Run, Standup } from "../types";
 import { blockerAgeDays, isBlocker, kindBehavior } from "../types";
 import { formatRunDate } from "../time";
@@ -36,7 +37,7 @@ export function buildDigest(
       .map((question, i) => {
         const answer = response.answers[i]?.trim();
         if (!answer) return null;
-        return `*${question}*\n${quote(answer)}`;
+        return `*${escapeMrkdwn(question)}*\n${quote(escapeMrkdwn(answer))}`;
       })
       .filter(Boolean)
       .join("\n");
@@ -64,13 +65,13 @@ export function buildDigest(
         const age = blockerAgeDays(b, run.runDate);
         const agePart = age > 1 ? ` _(blocked ${age} days)_` : "";
         const silent = b.lastConfirmedDate < run.runDate ? " _(no update today)_" : "";
-        return `• <@${b.userId}>: ${b.text.split("\n")[0]}${agePart}${silent}`;
+        return `• <@${b.userId}>: ${escapeMrkdwn(b.text.split("\n")[0] ?? "")}${agePart}${silent}`;
       });
   } else {
     const blockersIdx = standup.questions.length - 1;
     blockerLines = responses
       .filter((r) => isBlocker(r.answers[blockersIdx] ?? ""))
-      .map((r) => `• <@${r.userId}>: ${(r.answers[blockersIdx] ?? "").split("\n")[0]}`);
+      .map((r) => `• <@${r.userId}>: ${escapeMrkdwn((r.answers[blockersIdx] ?? "").split("\n")[0] ?? "")}`);
   }
   if (blockerLines.length > 0) {
     blocks.push({ type: "divider" });
@@ -96,5 +97,5 @@ export function buildDigest(
     blocks.push({ type: "context", elements: [{ type: "mrkdwn", text: contextLines.join("   •   ") }] });
   }
 
-  return { text: `${standup.name} digest for ${formatRunDate(run.runDate)}`, blocks };
+  return { text: `${escapeMrkdwn(standup.name)} digest for ${formatRunDate(run.runDate)}`, blocks };
 }

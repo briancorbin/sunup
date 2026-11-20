@@ -26,6 +26,7 @@ const standupInput = {
   userTzPrompts: true,
   reminderMinutes: 60,
   includeMood: true,
+  createdBy: null as string | null,
 };
 
 describe("SqliteStorage (shared migrations)", () => {
@@ -111,5 +112,66 @@ describe("SqliteStorage (shared migrations)", () => {
     await storage.deleteStandup(s.id);
     expect(await storage.listParticipants(s.id)).toHaveLength(0);
     expect(await storage.getRunById(run.id)).toBeNull();
+  });
+
+  it("round-trips createdBy and keeps it across updateStandup", async () => {
+    const owned = await storage.createStandup({ ...standupInput, createdBy: "U1" });
+    expect(owned.createdBy).toBe("U1");
+    expect((await storage.getStandup(owned.id))?.createdBy).toBe("U1");
+    await storage.updateStandup({ ...owned, name: "Renamed", createdBy: "U9" });
+    expect(await storage.getStandup(owned.id)).toMatchObject({ name: "Renamed", createdBy: "U1" });
+    const legacy = await storage.createStandup({ ...standupInput, channelId: "C2", createdBy: null });
+    expect(legacy.createdBy).toBeNull();
+  });
+
+  it("round-trips a participant's last prompt date", async () => {
+    const s = await storage.createStandup(standupInput);
+    await storage.addParticipant(s.id, "U1", null);
+    expect((await storage.listParticipants(s.id))[0]?.lastPromptDate).toBeNull();
+    await storage.setParticipantPromptDate(s.id, "U1", "2026-07-20");
+    expect((await storage.listParticipants(s.id))[0]?.lastPromptDate).toBe("2026-07-20");
+  });
+
+  it("claims a digest exactly once, and a claim can be released", async () => {
+    const s = await storage.createStandup(standupInput);
+    const run = await storage.getOrCreateRun(s.id, "2026-07-20");
+    expect(await storage.claimDigest(run.id, "2026-07-20T15:00:00Z")).toBe(true);
+    expect(await storage.claimDigest(run.id, "2026-07-20T15:00:01Z")).toBe(false);
+    expect((await storage.getRunById(run.id))?.digestPostedAt).toBe("2026-07-20T15:00:00Z");
+    await storage.releaseDigestClaim(run.id);
+    expect((await storage.getRunById(run.id))?.digestPostedAt).toBeNull();
+    expect(await storage.claimDigest(run.id, "2026-07-20T15:05:00Z")).toBe(true);
+    await storage.markDigestPosted(run.id, "2026-07-20T15:05:01Z", "123.456");
+    expect(await storage.getRunById(run.id)).toMatchObject({ digestPostedAt: "2026-07-20T15:05:01Z", digestTs: "123.456" });
+    // A claim that already has a message ts must not be released.
+    await storage.releaseDigestClaim(run.id);
+    expect(await storage.getRunById(run.id)).toMatchObject({ digestTs: "123.456" });
+  });
+
+  it("filters the kudos leaderboard by channel", async () => {
+    const k = (to: string, ch: string) => ({ fromUser: "U9", toUser: to, message: "m", channelId: ch, createdAt: "2026-07-19T00:00:00Z" });
+    await storage.addKudos(k("U1", "C1"));
+    await storage.addKudos(k("U1", "C1"));
+    await storage.addKudos(k("U2", "C2"));
+    await storage.addKudos(k("U2", "C2"));
+    await storage.addKudos(k("U2", "C2"));
+    expect(await storage.kudosLeaderboard("2026-07-01T00:00:00Z", 10)).toEqual([
+      { userId: "U2", count: 3 },
+      { userId: "U1", count: 2 },
+    ]);
+    expect(await storage.kudosLeaderboard("2026-07-01T00:00:00Z", 10, "C1")).toEqual([{ userId: "U1", count: 2 }]);
+  });
+
+  it("purges old resolved blockers but never open ones", async () => {
+    const s = await storage.createStandup(standupInput);
+    const oldResolved = await storage.openBlocker(s.id, "U1", "old resolved", "2026-01-01");
+    await storage.resolveBlocker(oldResolved.id, "2026-01-05T00:00:00Z");
+    const oldOpen = await storage.openBlocker(s.id, "U2", "old open", "2026-01-01");
+    const recentResolved = await storage.openBlocker(s.id, "U3", "recent resolved", "2026-07-01");
+    await storage.resolveBlocker(recentResolved.id, "2026-07-15T00:00:00Z");
+    await storage.purgeOlderThan(30, "2026-07-21T00:00:00Z");
+    expect(await storage.getBlockerById(oldResolved.id)).toBeNull();
+    expect(await storage.getBlockerById(oldOpen.id)).not.toBeNull();
+    expect(await storage.getBlockerById(recentResolved.id)).not.toBeNull();
   });
 });

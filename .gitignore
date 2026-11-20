@@ -4,3 +4,6 @@ dist/
 .dev.vars
 *.log
 .DS_Store
+*.db
+*.db-wal
+*.db-shm

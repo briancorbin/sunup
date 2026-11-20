@@ -26,6 +26,7 @@ interface StandupRow {
   reminder_minutes: number;
   include_mood: number;
   last_retro_date: string | null;
+  created_by: string | null;
 }
 
 function rowToStandup(row: StandupRow): Standup {
@@ -43,6 +44,7 @@ function rowToStandup(row: StandupRow): Standup {
     reminderMinutes: row.reminder_minutes,
     includeMood: row.include_mood === 1,
     lastRetroDate: row.last_retro_date,
+    createdBy: row.created_by,
   };
 }
 
@@ -128,8 +130,8 @@ export class D1Storage implements Storage {
   async createStandup(input: Omit<Standup, "id" | "lastRetroDate">): Promise<Standup> {
     const row = await this.db
       .prepare(
-        `INSERT INTO standups (name, channel_id, kind, questions, schedule_days, prompt_time, digest_time, timezone, user_tz_prompts, reminder_minutes, include_mood)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING *`,
+        `INSERT INTO standups (name, channel_id, kind, questions, schedule_days, prompt_time, digest_time, timezone, user_tz_prompts, reminder_minutes, include_mood, created_by)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING *`,
       )
       .bind(
         input.name,
@@ -143,6 +145,7 @@ export class D1Storage implements Storage {
         input.userTzPrompts ? 1 : 0,
         input.reminderMinutes,
         input.includeMood ? 1 : 0,
+        input.createdBy,
       )
       .first<StandupRow>();
     if (!row) throw new Error("createStandup: insert returned no row");
@@ -179,10 +182,17 @@ export class D1Storage implements Storage {
 
   async listParticipants(standupId: number): Promise<Participant[]> {
     const { results } = await this.db
-      .prepare("SELECT standup_id, user_id, tz, snoozed_until FROM participants WHERE standup_id = ?")
+      .prepare("SELECT standup_id, user_id, tz, snoozed_until, last_prompt_date FROM participants WHERE standup_id = ?")
       .bind(standupId)
-      .all<{ standup_id: number; user_id: string; tz: string | null; snoozed_until: string | null }>();
-    return results.map((r) => ({ standupId: r.standup_id, userId: r.user_id, tz: r.tz, snoozedUntil: r.snoozed_until }));
+      .all<{ standup_id: number; user_id: string; tz: string | null; snoozed_until: string | null; last_prompt_date: string | null }>();
+    return results.map((r) => ({ standupId: r.standup_id, userId: r.user_id, tz: r.tz, snoozedUntil: r.snoozed_until, lastPromptDate: r.last_prompt_date }));
+  }
+
+  async setParticipantPromptDate(standupId: number, userId: string, date: string): Promise<void> {
+    await this.db
+      .prepare("UPDATE participants SET last_prompt_date = ? WHERE standup_id = ? AND user_id = ?")
+      .bind(date, standupId, userId)
+      .run();
   }
 
   async listStandupsForUser(userId: string): Promise<Standup[]> {
@@ -242,6 +252,21 @@ export class D1Storage implements Storage {
 
   async markDigestPosted(runId: number, at: string, messageTs: string | null): Promise<void> {
     await this.db.prepare("UPDATE runs SET digest_posted_at = ?, digest_ts = ? WHERE id = ?").bind(at, messageTs, runId).run();
+  }
+
+  async claimDigest(runId: number, at: string): Promise<boolean> {
+    const result = await this.db
+      .prepare("UPDATE runs SET digest_posted_at = ? WHERE id = ? AND digest_posted_at IS NULL")
+      .bind(at, runId)
+      .run();
+    return result.meta.changes === 1;
+  }
+
+  async releaseDigestClaim(runId: number): Promise<void> {
+    await this.db
+      .prepare("UPDATE runs SET digest_posted_at = NULL, digest_ts = NULL WHERE id = ? AND digest_ts IS NULL")
+      .bind(runId)
+      .run();
   }
 
   async listRunParticipants(runId: number): Promise<RunParticipant[]> {
@@ -389,10 +414,12 @@ export class D1Storage implements Storage {
       .run();
   }
 
-  async kudosLeaderboard(sinceIso: string, limit: number): Promise<LeaderboardEntry[]> {
+  async kudosLeaderboard(sinceIso: string, limit: number, channelId?: string): Promise<LeaderboardEntry[]> {
     const { results } = await this.db
-      .prepare("SELECT to_user, COUNT(*) AS count FROM kudos WHERE created_at >= ? GROUP BY to_user ORDER BY count DESC LIMIT ?")
-      .bind(sinceIso, limit)
+      .prepare(
+        `SELECT to_user, COUNT(*) AS count FROM kudos WHERE created_at >= ?${channelId ? " AND channel_id = ?" : ""} GROUP BY to_user ORDER BY count DESC LIMIT ?`,
+      )
+      .bind(...(channelId ? [sinceIso, channelId, limit] : [sinceIso, limit]))
       .all<{ to_user: string; count: number }>();
     return results.map((r) => ({ userId: r.to_user, count: r.count }));
   }
@@ -403,5 +430,6 @@ export class D1Storage implements Storage {
     // Runs cascade to run_participants and responses.
     await this.db.prepare("DELETE FROM runs WHERE run_date < ?").bind(cutoffDate).run();
     await this.db.prepare("DELETE FROM kudos WHERE created_at < ?").bind(cutoff.toISOString()).run();
+    await this.db.prepare("DELETE FROM blockers WHERE resolved_at IS NOT NULL AND resolved_at < ?").bind(cutoff.toISOString()).run();
   }
 }

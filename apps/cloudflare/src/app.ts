@@ -6,6 +6,8 @@ export interface Env extends SlackEdgeAppEnv {
   DB: D1Database;
   /** Required despite being optional upstream — single-workspace installs always use a bot token. */
   SLACK_BOT_TOKEN: string;
+  /** Optional independent key for export/report links; defaults to one derived from the signing secret. */
+  LINK_SECRET?: string;
   RETENTION_DAYS?: string;
 }
 

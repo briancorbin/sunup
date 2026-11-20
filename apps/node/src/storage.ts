@@ -34,6 +34,7 @@ interface StandupRow {
   reminder_minutes: number;
   include_mood: number;
   last_retro_date: string | null;
+  created_by: string | null;
 }
 
 function rowToStandup(row: StandupRow): Standup {
@@ -51,6 +52,7 @@ function rowToStandup(row: StandupRow): Standup {
     reminderMinutes: row.reminder_minutes,
     includeMood: row.include_mood === 1,
     lastRetroDate: row.last_retro_date,
+    createdBy: row.created_by,
   };
 }
 
@@ -134,8 +136,8 @@ export class SqliteStorage implements Storage {
   async createStandup(input: Omit<Standup, "id" | "lastRetroDate">): Promise<Standup> {
     const row = this.db
       .prepare(
-        `INSERT INTO standups (name, channel_id, kind, questions, schedule_days, prompt_time, digest_time, timezone, user_tz_prompts, reminder_minutes, include_mood)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING *`,
+        `INSERT INTO standups (name, channel_id, kind, questions, schedule_days, prompt_time, digest_time, timezone, user_tz_prompts, reminder_minutes, include_mood, created_by)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING *`,
       )
       .get(
         input.name,
@@ -149,6 +151,7 @@ export class SqliteStorage implements Storage {
         input.userTzPrompts ? 1 : 0,
         input.reminderMinutes,
         input.includeMood ? 1 : 0,
+        input.createdBy,
       ) as StandupRow | undefined;
     if (!row) throw new Error("createStandup: insert returned no row");
     return rowToStandup(row);
@@ -183,9 +186,13 @@ export class SqliteStorage implements Storage {
 
   async listParticipants(standupId: number): Promise<Participant[]> {
     const rows = this.db
-      .prepare("SELECT standup_id, user_id, tz, snoozed_until FROM participants WHERE standup_id = ?")
-      .all(standupId) as Array<{ standup_id: number; user_id: string; tz: string | null; snoozed_until: string | null }>;
-    return rows.map((r) => ({ standupId: r.standup_id, userId: r.user_id, tz: r.tz, snoozedUntil: r.snoozed_until }));
+      .prepare("SELECT standup_id, user_id, tz, snoozed_until, last_prompt_date FROM participants WHERE standup_id = ?")
+      .all(standupId) as Array<{ standup_id: number; user_id: string; tz: string | null; snoozed_until: string | null; last_prompt_date: string | null }>;
+    return rows.map((r) => ({ standupId: r.standup_id, userId: r.user_id, tz: r.tz, snoozedUntil: r.snoozed_until, lastPromptDate: r.last_prompt_date }));
+  }
+
+  async setParticipantPromptDate(standupId: number, userId: string, date: string): Promise<void> {
+    this.db.prepare("UPDATE participants SET last_prompt_date = ? WHERE standup_id = ? AND user_id = ?").run(date, standupId, userId);
   }
 
   async listStandupsForUser(userId: string): Promise<Standup[]> {
@@ -236,6 +243,15 @@ export class SqliteStorage implements Storage {
 
   async markDigestPosted(runId: number, at: string, messageTs: string | null): Promise<void> {
     this.db.prepare("UPDATE runs SET digest_posted_at = ?, digest_ts = ? WHERE id = ?").run(at, messageTs, runId);
+  }
+
+  async claimDigest(runId: number, at: string): Promise<boolean> {
+    const result = this.db.prepare("UPDATE runs SET digest_posted_at = ? WHERE id = ? AND digest_posted_at IS NULL").run(at, runId);
+    return Number(result.changes) === 1;
+  }
+
+  async releaseDigestClaim(runId: number): Promise<void> {
+    this.db.prepare("UPDATE runs SET digest_posted_at = NULL, digest_ts = NULL WHERE id = ? AND digest_ts IS NULL").run(runId);
   }
 
   async listRunParticipants(runId: number): Promise<RunParticipant[]> {
@@ -368,10 +384,12 @@ export class SqliteStorage implements Storage {
       .run(kudos.fromUser, kudos.toUser, kudos.message, kudos.channelId, kudos.createdAt);
   }
 
-  async kudosLeaderboard(sinceIso: string, limit: number): Promise<LeaderboardEntry[]> {
+  async kudosLeaderboard(sinceIso: string, limit: number, channelId?: string): Promise<LeaderboardEntry[]> {
     const rows = this.db
-      .prepare("SELECT to_user, COUNT(*) AS count FROM kudos WHERE created_at >= ? GROUP BY to_user ORDER BY count DESC LIMIT ?")
-      .all(sinceIso, limit) as Array<{ to_user: string; count: number }>;
+      .prepare(
+        `SELECT to_user, COUNT(*) AS count FROM kudos WHERE created_at >= ?${channelId ? " AND channel_id = ?" : ""} GROUP BY to_user ORDER BY count DESC LIMIT ?`,
+      )
+      .all(...(channelId ? [sinceIso, channelId, limit] : [sinceIso, limit])) as Array<{ to_user: string; count: number }>;
     return rows.map((r) => ({ userId: r.to_user, count: r.count }));
   }
 
@@ -380,5 +398,6 @@ export class SqliteStorage implements Storage {
     const cutoffDate = cutoff.toISOString().slice(0, 10);
     this.db.prepare("DELETE FROM runs WHERE run_date < ?").run(cutoffDate);
     this.db.prepare("DELETE FROM kudos WHERE created_at < ?").run(cutoff.toISOString());
+    this.db.prepare("DELETE FROM blockers WHERE resolved_at IS NOT NULL AND resolved_at < ?").run(cutoff.toISOString());
   }
 }

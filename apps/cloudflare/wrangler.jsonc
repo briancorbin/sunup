@@ -12,8 +12,8 @@
     {
       "binding": "DB",
       "database_name": "sunup",
-      // Replace after `wrangler d1 create sunup` (see README).
-      "database_id": "1aa32b3e-581f-49c6-aed5-3e6b6054f786",
+      // Paste the id printed by `npx wrangler d1 create sunup` (see README).
+      "database_id": "REPLACE-WITH-YOUR-D1-DATABASE-ID",
       // Shared with apps/node — one migration set for every adapter.
       "migrations_dir": "../../migrations"
     }

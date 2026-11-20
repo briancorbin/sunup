@@ -1,3 +1,4 @@
+import { escapeMrkdwn } from "../mrkdwn";
 import type { CheckinResponse, LeaderboardEntry, Participant, RunSummary, Standup } from "../types";
 import { isBlocker } from "../types";
 import { formatRunDate } from "../time";
@@ -57,7 +58,7 @@ export function buildWeeklyRetro(standup: Standup, input: RetroInput): { text: s
     .filter(({ response }) => isBlocker(response.answers[blockersIdx] ?? ""))
     .map(({ runDate, response }) => {
       const weekday = new Date(`${runDate}T12:00:00Z`).getUTCDay();
-      return `• ${DAY_ABBR[weekday]} — <@${response.userId}>: ${(response.answers[blockersIdx] ?? "").split("\n")[0]}`;
+      return `• ${DAY_ABBR[weekday]} — <@${response.userId}>: ${escapeMrkdwn((response.answers[blockersIdx] ?? "").split("\n")[0] ?? "")}`;
     });
 
   if (input.kudosGiven > 0) {
@@ -86,5 +87,5 @@ export function buildWeeklyRetro(standup: Standup, input: RetroInput): { text: s
     });
   }
 
-  return { text: `${standup.name} weekly retro`, blocks };
+  return { text: `${escapeMrkdwn(standup.name)} weekly retro`, blocks };
 }
