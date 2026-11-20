@@ -85,6 +85,8 @@ export interface Standup {
   includeMood: boolean;
   /** "YYYY-MM-DD" the last weekly retro posted for (standup tz); null = never. */
   lastRetroDate: string | null;
+  /** Slack user id of whoever ran setup; null for check-ins created before 0006. */
+  createdBy: string | null;
 }
 
 export interface Participant {
@@ -94,6 +96,11 @@ export interface Participant {
   tz: string | null;
   /** "YYYY-MM-DD" (standup tz): skip prompts/reminders/waiting-on through this date. */
   snoozedUntil: string | null;
+  /**
+   * The participant's OWN local "YYYY-MM-DD" most recently handled by the
+   * prompt scheduler — one prompt per person per local day. null = never.
+   */
+  lastPromptDate: string | null;
 }
 
 /** True when the participant is snoozed on the given run date. */

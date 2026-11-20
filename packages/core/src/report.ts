@@ -77,7 +77,8 @@ export async function buildReportData(storage: Storage, standup: Standup, range:
     // Clamped: ex-participants' historical responses can push the raw ratio past 1.
     responseRate: possible > 0 ? Math.min(1, totalCheckins / possible) : 0,
     streaks: streaks.slice(0, 5),
-    kudos: await storage.kudosLeaderboard(`${startDate}T00:00:00Z`, 5),
+    // This channel's kudos only — the link is shareable, so no cross-channel leakage.
+    kudos: await storage.kudosLeaderboard(`${startDate}T00:00:00Z`, 5, standup.channelId),
     openBlockers: open.sort((a, b) => b.ageDays - a.ageDays),
     resolvedBlockers: resolved,
     avgResolveDays,

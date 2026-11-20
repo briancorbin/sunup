@@ -54,6 +54,11 @@ export function addDays(date: string, days: number): string {
   return d.toISOString().slice(0, 10);
 }
 
+/** 0 = Sunday … 6 = Saturday for a "YYYY-MM-DD" (calendar math, timezone-free). */
+export function weekdayOf(date: string): number {
+  return new Date(`${date}T12:00:00Z`).getUTCDay();
+}
+
 /** Human "Mon, Jun 2" style label for a "YYYY-MM-DD" run date. */
 export function formatRunDate(runDate: string): string {
   const d = new Date(`${runDate}T12:00:00Z`);

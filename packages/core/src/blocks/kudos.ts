@@ -1,3 +1,4 @@
+import { escapeMrkdwn } from "../mrkdwn";
 import type { LeaderboardEntry } from "../types";
 
 export function buildKudosMessage(fromUser: string, toUser: string, message: string): { text: string; blocks: unknown[] } {
@@ -5,7 +6,7 @@ export function buildKudosMessage(fromUser: string, toUser: string, message: str
   return {
     text,
     blocks: [
-      { type: "section", text: { type: "mrkdwn", text: `🎉 *Kudos!* <@${fromUser}> → <@${toUser}>\n> ${message}` } },
+      { type: "section", text: { type: "mrkdwn", text: `🎉 *Kudos!* <@${fromUser}> → <@${toUser}>\n> ${escapeMrkdwn(message)}` } },
     ],
   };
 }

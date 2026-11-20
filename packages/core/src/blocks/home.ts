@@ -1,3 +1,4 @@
+import { escapeMrkdwn } from "../mrkdwn";
 import type { LeaderboardEntry, Standup } from "../types";
 import { formatLeaderboard } from "./kudos";
 
@@ -58,7 +59,7 @@ export function buildHomeView(
       text: {
         type: "mrkdwn",
         text: [
-          `*${s.standup.name}*  ·  <#${s.standup.channelId}>`,
+          `*${escapeMrkdwn(s.standup.name)}*  ·  <#${s.standup.channelId}>`,
           today,
           `🔥 Streak: *${s.streak}*   ·   Team participation (last ${s.recentRuns.length} run${s.recentRuns.length === 1 ? "" : "s"}): ${participation || "_no runs yet_"}`,
         ].join("\n"),
@@ -67,8 +68,8 @@ export function buildHomeView(
     if (s.blockers.length > 0) {
       const lines = s.blockers.map((b) =>
         b.status === "open"
-          ? `🔴 ${mention(b.userId)}: ${b.text}${b.ageDays > 1 ? `  _(${b.ageDays} days)_` : ""}`
-          : `✅ ${mention(b.userId)}: ${b.text}`,
+          ? `🔴 ${mention(b.userId)}: ${escapeMrkdwn(b.text)}${b.ageDays > 1 ? `  _(${b.ageDays} days)_` : ""}`
+          : `✅ ${mention(b.userId)}: ${escapeMrkdwn(b.text)}`,
       );
       blocks.push({
         type: "section",

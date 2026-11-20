@@ -25,15 +25,15 @@
 - **🚧 Blocker tracking** — blockers aren't a one-day mention; they're tracked until resolved. The next morning's prompt asks "still blocked?" with one-tap Resolved / Still blocked buttons, the digest shows every open blocker with its age ("blocked 3 days") — including ones whose owner went silent — and the App Home has a live blocker board.
 - **⏰ Nudges** — non-responders get one friendly reminder before the digest posts. Check in late anyway? The posted digest updates in place to include you.
 - **😴 Vacation mode** — `/sunup snooze 5` pauses prompts and keeps you out of "waiting on" lists.
-- **🎉 Kudos** — `/kudos @teammate for shipping the thing` posts a celebration and feeds a 30-day leaderboard.
+- **🎉 Kudos** — `/kudos @teammate for shipping the thing` posts a celebration and feeds a 30-day leaderboard (workspace-wide in App Home; per channel in reports and the weekly retro).
 - **📈 Mood pulse** — an optional 1–5 mood question, shown in the digest only as a team average (and only with 3+ responses).
 - **🌇 `/sundown`** — an optional evening checkout twin: what shipped, what's carrying over, wins worth celebrating. Same engine, sunset tone — a channel can run both a morning check-in and an evening checkout.
-- **📆 Weekly retro** — on the week's last scheduled day, a summary posts after the digest: participation by day, mood trend, every blocker from the week, kudos totals, and streak leaders.
-- **📄 CSV export** — `/sunup export` gives a 15-minute signed download link for the channel's full history. No extra Slack scopes; your own Worker serves it.
+- **📆 Weekly retro** — on the week's last scheduled day, a summary posts after the digest: participation by day, mood trend, the week's blockers (up to eight), kudos totals, and streak leaders.
+- **📄 CSV export** — `/sunup export` gives a 15-minute signed download link for the channel's history (most recent 10,000 check-ins). No extra Slack scopes; your own Worker serves it.
 - **📊 Report pages** — `/sunup report` mints a 24-hour signed link to a charted, printable team report: participation and mood trends (inline SVG, no external anything), blocker aging stats, streak and kudos leaderboards. Dark-mode aware, share-in-channel with `report share`.
 - **🏠 Dashboard** — click sunup in your sidebar: today's status, streaks, team participation history, and the kudos leaderboard, right in Slack's App Home.
 
-**Privacy by design:** sunup requests *no message-reading scopes*. It only ever sees what people type into its own forms. Scopes: `chat:write`, `commands`, `im:write`, `users:read` (the last one just for timezones).
+**Privacy by design:** sunup requests *no message-reading scopes*. It only ever sees what people type into its own forms. Scopes: `chat:write`, `commands`, `im:write`, `users:read` (the last one for timezones and display names).
 
 ## What it looks like
 
@@ -56,7 +56,7 @@ You'll deploy your own instance: your Slack app, your Cloudflare account, your d
 ### Prerequisites
 
 - A [Cloudflare account](https://dash.cloudflare.com/sign-up) (the free tier is far more than enough)
-- Node 18+ and `npm`
+- Node 22+ (24+ if you use the Node adapter instead of Cloudflare) and `npm`
 - Permission to install a custom app in your Slack workspace
 
 ### 1. Deploy the Worker
@@ -64,12 +64,12 @@ You'll deploy your own instance: your Slack app, your Cloudflare account, your d
 ```sh
 git clone https://github.com/briancorbin/sunup.git
 cd sunup
-npm install
+npm install   # prints ~15 audit advisories — all in dev-only tooling (the wrangler/vitest/tsx toolchain); nothing ships to the Worker or the Node server
 npx wrangler login
 
 # Create the database, then paste its id into apps/cloudflare/wrangler.jsonc
 npx wrangler d1 create sunup --cwd apps/cloudflare
-npm run db:migrate --workspace apps/cloudflare
+npm run db:migrate --workspace apps/cloudflare   # wrangler lists the migrations and asks you to confirm (type y)
 
 npm run deploy
 ```
@@ -94,6 +94,8 @@ npx wrangler secret put SLACK_BOT_TOKEN      # paste the xoxb- token
 npx wrangler secret put SLACK_SIGNING_SECRET # paste the signing secret
 ```
 
+Optional: export and report links are HMAC-signed. By default the signing key is derived from your Slack signing secret; to use an independent key, set `LINK_SECRET` (`npx wrangler secret put LINK_SECRET`, or the `LINK_SECRET` env var on Node).
+
 (If Slack showed a ⚠️ next to the request URLs before the secrets existed, hit "Retry" on the *Event Subscriptions* page — it should turn green now.)
 
 ### 4. Use it
@@ -114,18 +116,24 @@ Teammates run `/sunup join`. That's it. `/sunup help` shows everything else:
 | `/sunup join` / `leave` | Manage your participation |
 | `/sunup status` | Show the channel's check-in config |
 | `/sunup config` | Open the settings editor — a modal with timepickers, day checkboxes, and question editing |
-| `/sunup config <field> <value>` | Quick edits: `prompt 08:30`, `digest 12:00`, `days mon,wed,fri`, `tz Europe/London`, `reminder 30`, `mood off`, `name Standup` |
+| `/sunup config <field> <value>` | Quick edits: `prompt 08:30`, `digest 12:00`, `days mon,wed,fri`, `tz Europe/London`, `reminder 30` (0 = off, otherwise at least 10 — the scheduler ticks every 10 minutes), `mood off`, `name Standup` |
 | `/sunup questions Q1 \| Q2 \| Q3` | Set custom questions (the last is the blockers question) |
 | `/sunup snooze 5` / `snooze off` | Vacation mode — pause your prompts, skip "waiting on" |
-| `/sunup export` | CSV of the channel's full check-in history (15-min signed link) |
+| `/sunup export` | CSV of the channel's check-in history (most recent 10,000 check-ins) (15-min signed link) |
 | `/sunup report [week\|month\|quarter]` | Charted report page — participation & mood trends, blocker stats, leaderboards (24h signed link; add `share` to post it in the channel) |
 | `/sunup remove` | Delete the channel's check-in and its history (asks to confirm) |
 | `/sundown …` | Evening checkout — all the same subcommands as `/sunup` |
 | `/kudos @user <message>` | Celebrate a teammate |
 
+## Who can manage a check-in
+
+`/sunup remove`, `/sunup config` (the modal and the quick edits) and `/sunup questions` are allowed for the person who ran `/sunup setup` (stored as `created_by`) or any Slack workspace admin or owner (checked live via `users.info`). Everyone else gets a polite refusal. Check-ins created before migration 0006 have no recorded creator, so those remain manageable by anyone in the channel. Removals are logged (who removed what) in the Worker/Node logs.
+
+`join`, `leave`, `snooze`, `status`, `export`, `report`, and checking in stay open to every channel member.
+
 ### Optional: data retention
 
-Set `RETENTION_DAYS` in `apps/cloudflare/wrangler.jsonc` (e.g. `"90"`) to automatically purge check-in and kudos data older than that.
+Set `RETENTION_DAYS` in `apps/cloudflare/wrangler.jsonc` (e.g. `"90"`) to automatically purge runs and responses, kudos, and resolved blockers older than that. Open blockers are kept. Both adapters honor it (on Node, it's the `RETENTION_DAYS` env var).
 
 ## Architecture
 
@@ -144,7 +152,7 @@ packages/slack-app   the Slack-facing application (slash command router,
 
 apps/cloudflare      Workers adapter: HTTP entry, D1 Storage, cron trigger.
 apps/node            Node adapter: plain Node server (node:sqlite storage —
-                     zero native deps), setInterval trigger, Dockerfile.
+                     no database server to run), setInterval trigger, Dockerfile.
 
 migrations/          one migration set, applied by wrangler (D1) and the
                      Node adapter's built-in runner alike.
@@ -161,13 +169,13 @@ cd apps/node
 SLACK_BOT_TOKEN=xoxb-… SLACK_SIGNING_SECRET=… BASE_URL=https://your-public-url npm start
 ```
 
-Migrations apply automatically on boot to `DB_PATH` (default `./sunup.db`). Point your Slack app's request URLs at the public URL (a reverse proxy or `cloudflared tunnel --url http://localhost:8787` for testing). Env vars: `PORT`, `DB_PATH`, `BASE_URL`, `CRON_INTERVAL_MINUTES`, `RETENTION_DAYS`.
+Migrations apply automatically on boot to `DB_PATH` (default `./sunup.db`). Point your Slack app's request URLs at the public URL (a reverse proxy or `cloudflared tunnel --url http://localhost:8787` for testing). Env vars: `PORT`, `DB_PATH`, `BASE_URL`, `CRON_INTERVAL_MINUTES`, `RETENTION_DAYS`, `LINK_SECRET` (optional, see below).
 
 Or containerized: `docker compose -f apps/node/docker-compose.yml up -d` (see [apps/node/docker-compose.yml](apps/node/docker-compose.yml)).
 
 ### Porting to another ecosystem
 
-Want sunup on AWS Lambda, Deno, or Bun? An adapter provides three things (see `apps/node` — it's ~150 lines plus a Storage impl):
+Want sunup on AWS Lambda, Deno, or Bun? An adapter provides three things (see `apps/node` — it's a ~100-line entry plus a Storage implementation — the node:sqlite one is ~400 lines):
 
 1. **An HTTP entry** that hands Slack requests to the shared `@sunup/slack-app` (built on [slack-edge](https://github.com/seratch/slack-edge), runs on anything Web-standard)
 2. **A `Storage` implementation** (`packages/core/src/ports.ts`; the D1 and node:sqlite versions are references)

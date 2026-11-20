@@ -1,7 +1,7 @@
 import { serve } from "@hono/node-server";
 import { DatabaseSync } from "node:sqlite";
 import { SlackClient, runCron, type Deps } from "@sunup/core";
-import { createSlackApp, handleExportRequest, handleReportRequest } from "@sunup/slack-app";
+import { createSlackApp, handleExportRequest, handleReportRequest, resolveLinkSecret } from "@sunup/slack-app";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { migrate } from "./migrate";
@@ -24,6 +24,8 @@ const dbPath = process.env.DB_PATH ?? "./sunup.db";
 const baseUrl = (process.env.BASE_URL ?? `http://localhost:${port}`).replace(/\/$/, "");
 const cronMinutes = Math.max(1, Number(process.env.CRON_INTERVAL_MINUTES ?? 5));
 const retention = Number(process.env.RETENTION_DAYS);
+// Export/report links: LINK_SECRET if set, else a key derived from the signing secret.
+const linkSecret = await resolveLinkSecret({ LINK_SECRET: process.env.LINK_SECRET, SLACK_SIGNING_SECRET: signingSecret });
 
 const migrationsDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../../migrations");
 const db = new DatabaseSync(dbPath);
@@ -38,7 +40,7 @@ const deps: Deps = {
   ...(Number.isFinite(retention) && retention > 0 ? { retentionDays: retention } : {}),
 };
 
-const app = createSlackApp({ deps, signingSecret, botToken, origin: baseUrl });
+const app = createSlackApp({ deps, signingSecret, botToken, linkSecret, origin: baseUrl });
 
 serve({
   port,
@@ -46,10 +48,10 @@ serve({
     const url = new URL(request.url);
     if (request.method === "GET" && url.pathname === "/healthz") return new Response("ok");
     if (request.method === "GET" && url.pathname === "/export") {
-      return await handleExportRequest(deps.storage, signingSecret, url);
+      return await handleExportRequest(deps.storage, linkSecret, url);
     }
     if (request.method === "GET" && url.pathname === "/report") {
-      return await handleReportRequest(deps, signingSecret, url);
+      return await handleReportRequest(deps, linkSecret, url);
     }
     return await app.run(request);
   },

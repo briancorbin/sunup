@@ -31,7 +31,10 @@ export interface Storage {
   listStandupsForUser(userId: string): Promise<Standup[]>;
   addParticipant(standupId: number, userId: string, tz: string | null): Promise<void>;
   removeParticipant(standupId: number, userId: string): Promise<void>;
+  /** Refresh a user's cached timezone across every standup they're in. */
   setParticipantTz(userId: string, tz: string): Promise<void>;
+  /** Record the participant's own local date the prompt scheduler last handled. */
+  setParticipantPromptDate(standupId: number, userId: string, date: string): Promise<void>;
   /** null clears the snooze. */
   setSnooze(standupId: number, userId: string, until: string | null): Promise<void>;
 
@@ -39,6 +42,15 @@ export interface Storage {
   getOrCreateRun(standupId: number, runDate: string): Promise<Run>;
   getRun(standupId: number, runDate: string): Promise<Run | null>;
   getRunById(runId: number): Promise<Run | null>;
+  /**
+   * Atomically claim the right to post a run's digest: sets digest_posted_at
+   * only if it is still NULL. Returns true for the one caller that won — so
+   * overlapping ticks can never double-post.
+   */
+  claimDigest(runId: number, at: string): Promise<boolean>;
+  /** Undo a claim whose post failed, so the next tick retries. */
+  releaseDigestClaim(runId: number): Promise<void>;
+  /** Record the posted digest's Slack ts (and posted-at) for in-place updates. */
   markDigestPosted(runId: number, at: string, messageTs: string | null): Promise<void>;
   listRunParticipants(runId: number): Promise<RunParticipant[]>;
   markPrompted(runId: number, userId: string, at: string): Promise<void>;
@@ -68,8 +80,10 @@ export interface Storage {
 
   // kudos
   addKudos(kudos: Kudos): Promise<void>;
-  kudosLeaderboard(sinceIso: string, limit: number): Promise<LeaderboardEntry[]>;
+  /** Top kudos recipients since `sinceIso`; `channelId` restricts to kudos given in that channel. */
+  kudosLeaderboard(sinceIso: string, limit: number, channelId?: string): Promise<LeaderboardEntry[]>;
 
   // retention
+  /** Delete runs (cascading responses), kudos, and RESOLVED blockers older than `days`. */
   purgeOlderThan(days: number, nowIso: string): Promise<void>;
 }
